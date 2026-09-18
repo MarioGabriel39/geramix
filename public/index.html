@@ -1,60 +1,235 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
 <title>GeraMix</title>
+
 <style>
-*{box-sizing:border-box}body{margin:0;background:#09090d;color:#fff;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
-main{max-width:760px;margin:auto;padding:18px 14px 50px}.logo{font-size:28px;font-weight:900}.muted{color:#9b9ba7;font-size:13px}
-.card{background:#15151c;border:1px solid #292934;border-radius:18px;padding:16px;margin:12px 0}
-h2{font-size:17px;margin:0 0 5px}.pick{display:block;text-align:center;border:1px dashed #555564;border-radius:12px;padding:14px;margin-top:12px;font-weight:800;background:#1c1c25}
-input{display:none}.files{margin-top:10px}.file{padding:8px;border-radius:8px;background:#1d1d26;margin:5px 0;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:12px}.stat{background:#1d1d26;border-radius:12px;text-align:center;padding:10px}.n{font-size:21px;font-weight:900}
-button,.download{display:block;width:100%;padding:14px;border:0;border-radius:12px;background:#fff;color:#111;font-weight:900;margin-top:12px;font-size:15px;text-align:center;text-decoration:none}button:disabled{opacity:.45}
-.progress{height:10px;background:#292934;border-radius:20px;overflow:hidden;margin-top:12px}.bar{height:100%;width:0%;background:#fff;transition:.2s}
-.status{margin-top:9px;font-size:13px;color:#bbb}.result{max-height:360px;overflow:auto;margin-top:12px}.combo{padding:10px;border-bottom:1px solid #292934;font-size:12px}.pill{display:inline-block;background:#292936;border-radius:8px;padding:4px 6px;margin:2px;color:#ddd}
-.note{font-size:12px;line-height:1.5;color:#92929e;margin-top:12px}
-</style></head>
-<body><main>
-<div class="logo">GeraMix</div><div class="muted">Multiplicador de vídeos com processamento no servidor</div>
+*{box-sizing:border-box}
+body{
+  margin:0;
+  font-family:Arial,sans-serif;
+  background:#f4f5f7;
+  color:#171717;
+}
+.container{
+  max-width:900px;
+  margin:auto;
+  padding:20px 14px 50px;
+}
+h1{margin:0 0 6px;font-size:30px}
+.subtitle{color:#666;margin-bottom:22px}
+.card{
+  background:white;
+  border-radius:16px;
+  padding:18px;
+  margin-bottom:15px;
+  box-shadow:0 2px 10px #00000012;
+}
+.card h2{
+  margin:0 0 12px;
+  font-size:18px;
+}
+input[type=file]{
+  width:100%;
+  padding:12px;
+  border:1px solid #ddd;
+  border-radius:10px;
+}
+.count{
+  margin-top:9px;
+  color:#666;
+  font-size:14px;
+}
+.total{
+  font-size:20px;
+  font-weight:bold;
+  margin:10px 0;
+}
+button,.download{
+  display:inline-block;
+  border:0;
+  border-radius:10px;
+  padding:12px 16px;
+  font-weight:bold;
+  cursor:pointer;
+  text-decoration:none;
+  background:#111;
+  color:white;
+}
+button:disabled{
+  opacity:.5;
+  cursor:not-allowed;
+}
+.progress{
+  height:12px;
+  background:#eee;
+  border-radius:20px;
+  overflow:hidden;
+  margin:12px 0;
+}
+.bar{
+  height:100%;
+  width:0%;
+  background:#111;
+  transition:.3s;
+}
+.status{
+  font-size:14px;
+  color:#555;
+}
+.video-card{
+  border:1px solid #e5e5e5;
+  border-radius:14px;
+  padding:12px;
+  margin-top:12px;
+}
+.video-card video{
+  width:100%;
+  max-height:500px;
+  background:#000;
+  border-radius:10px;
+}
+.video-title{
+  font-weight:bold;
+  margin:10px 0 5px;
+}
+.info{
+  font-size:13px;
+  color:#666;
+  line-height:1.5;
+}
+.badge{
+  display:inline-block;
+  margin-top:8px;
+  padding:6px 9px;
+  border-radius:8px;
+  background:#eef7ee;
+  color:#256025;
+  font-size:12px;
+  font-weight:bold;
+}
+.hidden{display:none}
+.error{
+  color:#b00020;
+  white-space:pre-wrap;
+}
+</style>
+</head>
 
-<section class="card"><h2>1. Ganchos</h2><div class="muted">Até 10 vídeos de abertura</div>
-<label class="pick" for="hooks">＋ Selecionar vídeos</label><input id="hooks" type="file" accept="video/*" multiple><div id="hl" class="files"></div></section>
+<body>
 
-<section class="card"><h2>2. Corpos</h2><div class="muted">Até 10 vídeos principais</div>
-<label class="pick" for="bodies">＋ Selecionar vídeos</label><input id="bodies" type="file" accept="video/*" multiple><div id="bl" class="files"></div></section>
+<div class="container">
 
-<section class="card"><h2>3. CTAs</h2><div class="muted">Até 10 vídeos finais</div>
-<label class="pick" for="ctas">＋ Selecionar vídeos</label><input id="ctas" type="file" accept="video/*" multiple><div id="cl" class="files"></div></section>
+  <h1>🎬 GeraMix</h1>
+  <div class="subtitle">
+    Multiplicador de vídeos — Hook + Corpo + CTA
+  </div>
 
-<section class="card"><h2>Gerar vídeos</h2>
-<div class="stats"><div class="stat"><div id="hn" class="n">0</div><div class="muted">Ganchos</div></div><div class="stat"><div id="bn" class="n">0</div><div class="muted">Corpos</div></div><div class="stat"><div id="cn" class="n">0</div><div class="muted">CTAs</div></div></div>
-<div style="text-align:center;margin-top:10px">Total: <b id="total">0</b> vídeos</div>
-<button id="go">Gerar vídeos MP4</button><div class="progress"><div id="bar" class="bar"></div></div><div id="status" class="status">Pronto.</div>
-<a id="download" class="download" style="display:none" href="#">⬇ Baixar ZIP</a>
-<div id="result" class="result"></div>
-<div class="note">Os vídeos são enviados ao servidor para normalização e montagem. O servidor padroniza resolução, FPS e áudio antes de combinar Gancho → Corpo → CTA. O índice de “originalidade” representa a combinação técnica dentro do projeto; não é uma garantia de originalidade perante plataformas.</div>
-</section>
-</main>
+  <div class="card">
+    <h2>1️⃣ Hooks / Ganchos</h2>
+    <input id="hooks" type="file" accept="video/*" multiple>
+    <div id="hooksCount" class="count">0 vídeos</div>
+  </div>
+
+  <div class="card">
+    <h2>2️⃣ Corpos</h2>
+    <input id="bodies" type="file" accept="video/*" multiple>
+    <div id="bodiesCount" class="count">0 vídeos</div>
+  </div>
+
+  <div class="card">
+    <h2>3️⃣ CTAs</h2>
+    <input id="ctas" type="file" accept="video/*" multiple>
+    <div id="ctasCount" class="count">0 vídeos</div>
+  </div>
+
+  <div class="card">
+    <div class="total">
+      Combinações: <span id="total">0</span>
+    </div>
+
+    <button id="generate">
+      🚀 Gerar vídeos
+    </button>
+  </div>
+
+  <div id="processing" class="card hidden">
+    <h2>⚙️ Processando</h2>
+
+    <div class="progress">
+      <div id="bar" class="bar"></div>
+    </div>
+
+    <div id="status" class="status">
+      Preparando...
+    </div>
+  </div>
+
+  <div id="result" class="card hidden">
+
+    <h2>✅ Vídeos gerados</h2>
+
+    <a id="zip" class="download" href="#" download>
+      ⬇️ Baixar todos em ZIP
+    </a>
+
+    <div id="videos"></div>
+
+  </div>
+
+  <div id="error" class="card error hidden"></div>
+
+</div>
+
 <script>
-const D={h:[],b:[],c:[]},$=id=>document.getElementById(id);
-function setup(id,k,list){$(id).onchange=e=>{D[k]=[...e.target.files];$(list).innerHTML=D[k].map((f,i)=>`<div class=file>${i+1}. ${f.name}</div>`).join('');update()}}
-function update(){$('hn').textContent=D.h.length;$('bn').textContent=D.b.length;$('cn').textContent=D.c.length;$('total').textContent=(D.h.length*D.b.length*D.c.length).toLocaleString('pt-BR')}
-setup('hooks','h','hl');setup('bodies','b','bl');setup('ctas','c','cl');
 
-$('go').onclick=async()=>{
- if(!D.h.length||!D.b.length||!D.c.length){alert('Selecione pelo menos 1 vídeo em cada categoria.');return}
- const fd=new FormData(); D.h.forEach(f=>fd.append('hooks',f));D.b.forEach(f=>fd.append('bodies',f));D.c.forEach(f=>fd.append('ctas',f));
- $('go').disabled=true;$('download').style.display='none';$('result').innerHTML='';$('bar').style.width='0%';$('status').textContent='Enviando vídeos…';
- try{
-   const r=await fetch('/api/jobs',{method:'POST',body:fd});const j=await r.json();if(!r.ok)throw Error(j.error||'Falha no envio');
-   const poll=async()=>{const x=await (await fetch('/api/jobs/'+j.id)).json();
-     const pct=x.total?Math.round(x.done/x.total*100):0;$('bar').style.width=pct+'%';$('status').textContent=x.current||'Processando…';
-     if(x.files?.length) $('result').innerHTML=x.files.map(f=>`<div class=combo><b>✓ ${f.name}</b><br><span class=pill>Gancho: ${f.hook}</span><span class=pill>Corpo: ${f.body}</span><span class=pill>CTA: ${f.cta}</span><br><span style="color:#aaa">Combinação única #${f.index}</span></div>`).join('');
-     if(x.status==='done'){$('bar').style.width='100%';$('download').href=x.zip;$('download').style.display='block';$('status').textContent=`Concluído: ${x.total} vídeos.`;$('go').disabled=false;return}
-     if(x.status==='error'){throw Error(x.error||'Processamento falhou')}
-     setTimeout(poll,1000);
-   }; poll();
- }catch(e){$('status').textContent='Erro: '+e.message;alert(e.message);$('go').disabled=false}
-};
-</script></body></html>
+const hooksInput = document.getElementById("hooks");
+const bodiesInput = document.getElementById("bodies");
+const ctasInput = document.getElementById("ctas");
+
+const hooksCount = document.getElementById("hooksCount");
+const bodiesCount = document.getElementById("bodiesCount");
+const ctasCount = document.getElementById("ctasCount");
+
+const total = document.getElementById("total");
+const generate = document.getElementById("generate");
+
+const processing = document.getElementById("processing");
+const bar = document.getElementById("bar");
+const status = document.getElementById("status");
+
+const result = document.getElementById("result");
+const zip = document.getElementById("zip");
+const videos = document.getElementById("videos");
+
+const errorBox = document.getElementById("error");
+
+function update(){
+
+  const h = hooksInput.files.length;
+  const b = bodiesInput.files.length;
+  const c = ctasInput.files.length;
+
+  hooksCount.textContent = h + (h === 1 ? " vídeo" : " vídeos");
+  bodiesCount.textContent = b + (b === 1 ? " vídeo" : " vídeos");
+  ctasCount.textContent = c + (c === 1 ? " vídeo" : " vídeos");
+
+  total.textContent = h * b * c;
+}
+
+hooksInput.addEventListener("change",update);
+bodiesInput.addEventListener("change",update);
+ctasInput.addEventListener("change",update);
+
+function showError(message){
+
+  errorBox.textContent = message;
+  errorBox.classList.remove("hidden");
+
+}
+
+async function createJob(){
+
+  errorBox.classList.add("hidden");
