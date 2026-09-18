@@ -13,5 +13,7 @@
     "express": "^5.1.0",
     "ffmpeg-static": "^5.2.0",
     "multer": "^2.0.2"
+    "cookie-parser": "^1.4.7",
+"bcryptjs": "^3.0.2",
   }
 }
