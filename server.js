@@ -5,8 +5,6 @@ import fsp from "fs/promises";
 import path from "path";
 import os from "os";
 import crypto from "crypto";
-import cookieParser from "cookie-parser";
-import bcrypt from "bcryptjs";
 import { spawn } from "child_process";
 import archiver from "archiver";
 import ffmpegPath from "ffmpeg-static";
