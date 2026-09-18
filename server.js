@@ -18,17 +18,6 @@ const UPLOADS = path.join(BASE, "uploads");
 const JOBS = path.join(BASE, "jobs");
 await Promise.all([fsp.mkdir(UPLOADS, { recursive: true }), fsp.mkdir(JOBS, { recursive: true })]);
 
-const { createClient } = require('@supabase/supabase-js');
-const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_ANON_KEY
-);
-app.get('/api/config', (req, res) => {
-  res.json({
-    supabaseUrl: process.env.SUPABASE_URL,
-    supabaseAnonKey: process.env.SUPABASE_ANON_KEY
-  });
-});
 app.use(express.static(PUBLIC));
 app.get("/health", (_, res) => res.json({ ok: true, service: "geramix", ffmpeg: Boolean(ffmpegPath) }));
 
