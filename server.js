@@ -18,6 +18,7 @@ const UPLOADS = path.join(BASE, "uploads");
 const JOBS = path.join(BASE, "jobs");
 await Promise.all([fsp.mkdir(UPLOADS, { recursive: true }), fsp.mkdir(JOBS, { recursive: true })]);
 
+const { createClient } = require('@supabase/supabase-js');
 app.use(express.static(PUBLIC));
 app.get("/health", (_, res) => res.json({ ok: true, service: "geramix", ffmpeg: Boolean(ffmpegPath) }));
 
