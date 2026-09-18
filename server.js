@@ -17,29 +17,6 @@ const BASE = path.join(os.tmpdir(), "geramix");
 const UPLOADS = path.join(BASE, "uploads");
 const JOBS = path.join(BASE, "jobs");
 await Promise.all([fsp.mkdir(UPLOADS, { recursive: true }), fsp.mkdir(JOBS, { recursive: true })]);
-const AUTH_USER = process.env.AUTH_USER || "admin";
-const AUTH_PASSWORD = process.env.AUTH_PASSWORD || "troque-esta-senha";
-
-function checkAuth(req, res, next) {
-  const auth = req.headers.authorization || "";
-
-  if (!auth.startsWith("Basic ")) {
-    res.setHeader("WWW-Authenticate", 'Basic realm="GeraMix"');
-    return res.status(401).send("Login necessário");
-  }
-
-  const decoded = Buffer.from(auth.slice(6), "base64").toString("utf8");
-  const separator = decoded.indexOf(":");
-  const user = separator >= 0 ? decoded.slice(0, separator) : "";
-  const password = separator >= 0 ? decoded.slice(separator + 1) : "";
-
-  if (user !== AUTH_USER || password !== AUTH_PASSWORD) {
-    res.setHeader("WWW-Authenticate", 'Basic realm="GeraMix"');
-    return res.status(401).send("Usuário ou senha incorretos");
-  }
-
-  next();
-}
 
 app.use(express.static(PUBLIC));
 app.get("/health", (_, res) => res.json({ ok: true, service: "geramix", ffmpeg: Boolean(ffmpegPath) }));
