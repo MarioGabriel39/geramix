@@ -66,7 +66,51 @@
       <input type="password" placeholder="Confirmar senha" required>
       <button type="submit">Criar conta</button>
     </form>
+    
+<script>
+  const form = document.querySelector('form');
 
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+
+    const inputs = form.querySelectorAll('input');
+    const usuario = inputs[0].value;
+    const email = inputs[1].value;
+    const senha = inputs[2].value;
+    const confirmar = inputs[3].value;
+
+    if (senha !== confirmar) {
+      alert('As senhas não são iguais.');
+      return;
+    }
+
+    const config = await fetch('/api/config').then(r => r.json());
+
+    const { createClient } = supabase;
+    const client = createClient(
+      config.supabaseUrl,
+      config.supabaseAnonKey
+    );
+
+    const { error } = await client.auth.signUp({
+      email: email,
+      password: senha,
+      options: {
+        data: {
+          usuario: usuario
+        }
+      }
+    });
+
+    if (error) {
+      alert(error.message);
+      return;
+    }
+
+    alert('Conta criada com sucesso!');
+    window.location.href = '/login.html';
+  });
+</script>
     <a class="voltar" href="/login.html">Voltar para entrar</a>
   </div>
 </body>
