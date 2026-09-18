@@ -76,7 +76,7 @@ app.post("/api/jobs", upload.fields([
   const hooks = req.files?.hooks || [], bodies = req.files?.bodies || [], ctas = req.files?.ctas || [];
   if (!hooks.length || !bodies.length || !ctas.length) return res.status(400).json({ error: "Envie pelo menos 1 vídeo em cada categoria." });
   const total = hooks.length * bodies.length * ctas.length;
-  if (total > 500) return res.status(400).json({ error: "Limite de 500 combinações por lote." });
+  if (total > 1000) return res.status(400).json({ error: "Limite de 500 combinações por lote." });
 
   const id = crypto.randomUUID(), dir = path.join(JOBS, id);
   await fsp.mkdir(dir, { recursive: true });
