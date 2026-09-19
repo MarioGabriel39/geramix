@@ -69,5 +69,28 @@
 </button>
     </form>
   </div>
+  <script>
+const form = document.querySelector('form');
+
+form.addEventListener('submit', async function(e) {
+  e.preventDefault();
+
+  const inputs = form.querySelectorAll('input');
+  const email = inputs[1].value;
+  const senha = inputs[2].value;
+
+  const { error } = await supabase.auth.signInWithPassword({
+    email: email,
+    password: senha
+  });
+
+  if (error) {
+    alert(error.message);
+    return;
+  }
+
+  window.location.href = '/';
+});
+</script>
 </body>
 </html>
