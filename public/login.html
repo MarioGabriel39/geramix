@@ -4,79 +4,111 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>GeraMix - Login</title>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
   <style>
-    *{box-sizing:border-box}
-    body{
-      margin:0;
-      min-height:100vh;
-      display:flex;
-      align-items:center;
-      justify-content:center;
-      background:#111;
-      color:#fff;
-      font-family:Arial,sans-serif;
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #111;
+      color: white;
+      font-family: Arial, sans-serif;
     }
-    .login{
-      width:90%;
-      max-width:380px;
-      background:#1c1c24;
-      padding:28px;
-      border-radius:20px;
-      box-shadow:0 15px 40px rgba(0,0,0,.4);
+
+    .login {
+      width: 90%;
+      max-width: 400px;
+      text-align: center;
     }
-    h1{
-      text-align:center;
-      margin:0 0 8px;
+
+    h1 {
+      margin-bottom: 10px;
     }
-    p{
-      text-align:center;
-      color:#999;
-      margin:0 0 24px;
+
+    p {
+      margin-bottom: 25px;
     }
-    input,button{
-      width:100%;
-      padding:14px;
-      margin-top:12px;
-      border-radius:12px;
-      font-size:16px;
+
+    form {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
     }
-    input{
-      border:1px solid #333;
-      background:#292934;
-      color:#fff;
+
+    input,
+    button {
+      box-sizing: border-box;
+      width: 100%;
+      padding: 14px;
+      border-radius: 8px;
+      font-size: 16px;
     }
-    button{
-      border:0;
-      background:#fff;
-      color:#111;
-      font-weight:bold;
-      cursor:pointer;
+
+    input {
+      border: 1px solid #555;
+      background: #222;
+      color: white;
+    }
+
+    button {
+      border: none;
+      cursor: pointer;
     }
   </style>
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
-  <script>
-const SUPABASE_URL = 'https://xbhztvjdzqpsdjtwmpys.supabase.co';
-const SUPABASE_ANON_KEY = 'sb_publishable_1QZy7zvLfCrUjSS2fZGWaQ_8svC39fb;
 
-const supabaseClient = window.supabase.createClient(
-  SUPABASE_URL,
-  SUPABASE_ANON_KEY
-);
-</script>
 <body>
+
   <div class="login">
     <h1>GeraMix</h1>
     <p>Acesso restrito</p>
 
     <form>
       <input type="email" placeholder="E-mail" required>
+
       <input type="password" placeholder="Senha" required>
+
       <button type="submit">Entrar</button>
+
       <button type="button" onclick="window.location.href='/cadastro.html'">
-  Criar conta
-</button>
+        Criar conta
+      </button>
     </form>
+  </div>
+
+  <script>
+    const SUPABASE_URL = 'https://xbhztvjdzqpsdjtwmpys.supabase.co';
+
+    const SUPABASE_ANON_KEY = 'sb_publishable_1QZy7zvLfCrUjSS2fZGWaQ_8svC39fb';
+
+    const supabaseClient = window.supabase.createClient(
+      SUPABASE_URL,
+      SUPABASE_ANON_KEY
+    );
+
+    document.querySelector('form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+
+      const email = document.querySelector('input[type="email"]').value;
+      const senha = document.querySelector('input[type="password"]').value;
+
+      const { error } = await supabaseClient.auth.signInWithPassword({
+        email: email,
+        password: senha
+      });
+
+      if (error) {
+        alert(error.message);
+        return;
+      }
+
+      window.location.href = '/';
+    });
+  </script>
 
 </body>
 </html>
