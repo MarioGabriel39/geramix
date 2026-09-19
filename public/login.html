@@ -55,6 +55,15 @@
   </style>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
+  <script>
+const SUPABASE_URL = 'COLE_AQUI_A_URL_DO_SUPABASE';
+const SUPABASE_ANON_KEY = 'COLE_AQUI_A_PUBLISHABLE_KEY';
+
+const supabaseClient = window.supabase.createClient(
+  SUPABASE_URL,
+  SUPABASE_ANON_KEY
+);
+</script>
 <body>
   <div class="login">
     <h1>GeraMix</h1>
