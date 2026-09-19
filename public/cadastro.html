@@ -65,6 +65,41 @@
       <input type="password" placeholder="Senha" required>
       <input type="password" placeholder="Confirmar senha" required>
       <button type="submit">Criar conta</button>
+      <script>
+  document.querySelector('form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+
+    const inputs = document.querySelectorAll('input');
+
+    const usuario = inputs[0].value;
+    const email = inputs[1].value;
+    const senha = inputs[2].value;
+    const confirmarSenha = inputs[3].value;
+
+    if (senha !== confirmarSenha) {
+      alert('As senhas não conferem.');
+      return;
+    }
+
+    const { error } = await supabaseClient.auth.signUp({
+      email: email,
+      password: senha,
+      options: {
+        data: {
+          usuario: usuario
+        }
+      }
+    });
+
+    if (error) {
+      alert(error.message);
+      return;
+    }
+
+    alert('Conta criada com sucesso!');
+    window.location.href = '/login.html';
+  });
+</script>
     </form>
     
 <script>
