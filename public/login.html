@@ -91,6 +91,8 @@
     );
 
     document.querySelector('form').addEventListener('submit', async (e) => {
+      document.querySelector('form').addEventListener('submit', async (e) => {
+      e.preventDefault();
       e.preventDefault();
 
       const email = document.querySelector('input[type="email"]').value;
