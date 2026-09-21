@@ -249,6 +249,71 @@ button:disabled{
   transform:scale(.98);
 }
 
+.originality{
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  margin-top:12px;
+  padding:11px 12px;
+  border-radius:12px;
+  font-size:15px;
+  font-weight:950;
+  letter-spacing:.2px;
+  background:
+    linear-gradient(
+      135deg,
+      rgba(22,217,255,.12),
+      rgba(142,92,255,.12),
+      rgba(255,59,152,.12)
+    );
+  border:1px solid rgba(255,255,255,.12);
+}
+
+.originality small{
+  margin-right:7px;
+  color:#aeb4c5;
+  font-size:11px;
+  font-weight:700;
+}
+
+.originality.high{
+  color:#35e6a2;
+}
+
+.originality.medium{
+  color:#ffd45c;
+}
+
+.originality.low{
+  color:#ff7d8e;
+}
+
+.originality-summary{
+  display:grid;
+  grid-template-columns:repeat(4,1fr);
+  gap:7px;
+  margin-top:13px;
+}
+
+.originality-summary-item{
+  text-align:center;
+  padding:10px 5px;
+  border-radius:12px;
+  background:rgba(255,255,255,.045);
+  border:1px solid rgba(255,255,255,.07);
+}
+
+.originality-summary-number{
+  font-size:17px;
+  font-weight:950;
+}
+
+.originality-summary-label{
+  margin-top:3px;
+  color:#969aaa;
+  font-size:10px;
+}
+
 .note{
   font-size:12px;
   line-height:1.55;
@@ -273,6 +338,10 @@ button:disabled{
   .preview{
     max-height:500px;
   }
+
+  .originality-summary{
+    grid-template-columns:repeat(2,1fr);
+  }
 }
 </style>
 </head>
@@ -281,14 +350,25 @@ button:disabled{
 <main>
 
 <div class="logo">GeraMix</div>
-<div class="muted">Multiplicador de vídeos com processamento no servidor</div>
+<div class="muted">
+  Multiplicador de vídeos com processamento no servidor
+</div>
 
 <section class="card">
   <h2>1. Ganchos</h2>
   <div class="muted">Até 10 vídeos de abertura</div>
 
-  <label class="pick" for="hooks">＋ Selecionar vídeos</label>
-  <input id="hooks" type="file" accept="video/*" multiple>
+  <label class="pick" for="hooks">
+    ＋ Selecionar vídeos
+  </label>
+
+  <input
+    id="hooks"
+    type="file"
+    accept="video/*"
+    multiple
+  >
+
   <div id="hl" class="files"></div>
 </section>
 
@@ -296,8 +376,17 @@ button:disabled{
   <h2>2. Corpos</h2>
   <div class="muted">Até 10 vídeos principais</div>
 
-  <label class="pick" for="bodies">＋ Selecionar vídeos</label>
-  <input id="bodies" type="file" accept="video/*" multiple>
+  <label class="pick" for="bodies">
+    ＋ Selecionar vídeos
+  </label>
+
+  <input
+    id="bodies"
+    type="file"
+    accept="video/*"
+    multiple
+  >
+
   <div id="bl" class="files"></div>
 </section>
 
@@ -305,8 +394,17 @@ button:disabled{
   <h2>3. CTAs</h2>
   <div class="muted">Até 10 vídeos finais</div>
 
-  <label class="pick" for="ctas">＋ Selecionar vídeos</label>
-  <input id="ctas" type="file" accept="video/*" multiple>
+  <label class="pick" for="ctas">
+    ＋ Selecionar vídeos
+  </label>
+
+  <input
+    id="ctas"
+    type="file"
+    accept="video/*"
+    multiple
+  >
+
   <div id="cl" class="files"></div>
 </section>
 
@@ -315,6 +413,7 @@ button:disabled{
   <h2>Gerar vídeos</h2>
 
   <div class="stats">
+
     <div class="stat">
       <div id="hn" class="n">0</div>
       <div class="muted">Ganchos</div>
@@ -329,32 +428,43 @@ button:disabled{
       <div id="cn" class="n">0</div>
       <div class="muted">CTAs</div>
     </div>
+
   </div>
 
   <div style="text-align:center;margin-top:10px">
     Total: <b id="total">0</b> vídeos
   </div>
 
-  <button id="go">Gerar vídeos MP4</button>
+  <button id="go">
+    Gerar vídeos MP4
+  </button>
 
   <div class="progress">
     <div id="bar" class="bar"></div>
   </div>
 
-  <div id="status" class="status">Pronto.</div>
+  <div id="status" class="status">
+    Pronto.
+  </div>
 
-  <a id="download" class="download" style="display:none" href="#">
+  <a
+    id="download"
+    class="download"
+    style="display:none"
+    href="#"
+  >
     ⬇ Baixar todos em ZIP
   </a>
+
+  <div id="originalitySummary"></div>
 
   <div id="result" class="result"></div>
 
   <div class="note">
-    Os vídeos são enviados ao servidor para normalização e montagem.
-    O servidor padroniza resolução, FPS e áudio antes de combinar
-    Gancho → Corpo → CTA. O índice de “originalidade” representa
-    a combinação técnica dentro do projeto; não é uma garantia de
-    originalidade perante plataformas.
+    O índice de originalidade mostra a variação estrutural
+    entre as combinações do lote, considerando Gancho, Corpo
+    e CTA. Não representa uma garantia de originalidade perante
+    TikTok, Instagram, YouTube ou outras plataformas.
   </div>
 
 </section>
@@ -362,165 +472,390 @@ button:disabled{
 </main>
 
 <script>
-const D={h:[],b:[],c:[]},$=id=>document.getElementById(id);
+const D={
+  h:[],
+  b:[],
+  c:[]
+};
+
+const $=id=>
+  document.getElementById(id);
 
 function setup(id,k,list){
+
   $(id).onchange=e=>{
+
     D[k]=[...e.target.files];
 
-    $(list).innerHTML=D[k]
-      .map((f,i)=>`<div class="file">${i+1}. ${f.name}</div>`)
-      .join('');
+    $(list).innerHTML=
+      D[k]
+        .map(
+          (f,i)=>
+            `<div class="file">${i+1}. ${escapeHtml(f.name)}</div>`
+        )
+        .join('');
 
     update();
-  }
+  };
+}
+
+function escapeHtml(value){
+
+  return String(value)
+    .replace(/&/g,'&amp;')
+    .replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;')
+    .replace(/'/g,'&#039;');
 }
 
 function update(){
-  $('hn').textContent=D.h.length;
-  $('bn').textContent=D.b.length;
-  $('cn').textContent=D.c.length;
+
+  $('hn').textContent=
+    D.h.length;
+
+  $('bn').textContent=
+    D.b.length;
+
+  $('cn').textContent=
+    D.c.length;
 
   $('total').textContent=
-    (D.h.length*D.b.length*D.c.length)
-    .toLocaleString('pt-BR');
+    (
+      D.h.length *
+      D.b.length *
+      D.c.length
+    ).toLocaleString('pt-BR');
 }
 
-setup('hooks','h','hl');
-setup('bodies','b','bl');
-setup('ctas','c','cl');
+function originalityClass(value){
 
-$('go').onclick=async()=>{
+  if(value>=90){
+    return 'high';
+  }
 
-  if(!D.h.length||!D.b.length||!D.c.length){
-    alert('Selecione pelo menos 1 vídeo em cada categoria.');
+  if(value>=80){
+    return 'medium';
+  }
+
+  return 'low';
+}
+
+function renderOriginalitySummary(files){
+
+  if(!files.length){
+    $('originalitySummary').innerHTML='';
     return;
   }
 
-  const fd=new FormData();
+  const counts={
+    100:0,
+    90:0,
+    80:0,
+    70:0
+  };
 
-  D.h.forEach(f=>fd.append('hooks',f));
-  D.b.forEach(f=>fd.append('bodies',f));
-  D.c.forEach(f=>fd.append('ctas',f));
+  files.forEach(file=>{
+
+    const value=
+      Number(file.originality);
+
+    if(
+      Object.prototype.hasOwnProperty
+      .call(counts,value)
+    ){
+      counts[value]++;
+    }
+
+  });
+
+  $('originalitySummary').innerHTML=`
+    <div class="originality-summary">
+
+      <div class="originality-summary-item">
+        <div class="originality-summary-number">
+          ${counts[100]}
+        </div>
+        <div class="originality-summary-label">
+          100%
+        </div>
+      </div>
+
+      <div class="originality-summary-item">
+        <div class="originality-summary-number">
+          ${counts[90]}
+        </div>
+        <div class="originality-summary-label">
+          90%
+        </div>
+      </div>
+
+      <div class="originality-summary-item">
+        <div class="originality-summary-number">
+          ${counts[80]}
+        </div>
+        <div class="originality-summary-label">
+          80%
+        </div>
+      </div>
+
+      <div class="originality-summary-item">
+        <div class="originality-summary-number">
+          ${counts[70]}
+        </div>
+        <div class="originality-summary-label">
+          70%
+        </div>
+      </div>
+
+    </div>
+  `;
+}
+
+setup(
+  'hooks',
+  'h',
+  'hl'
+);
+
+setup(
+  'bodies',
+  'b',
+  'bl'
+);
+
+setup(
+  'ctas',
+  'c',
+  'cl'
+);
+
+$('go').onclick=async()=>{
+
+  if(
+    !D.h.length ||
+    !D.b.length ||
+    !D.c.length
+  ){
+    alert(
+      'Selecione pelo menos 1 vídeo em cada categoria.'
+    );
+
+    return;
+  }
+
+  const fd=
+    new FormData();
+
+  D.h.forEach(
+    f=>
+      fd.append(
+        'hooks',
+        f
+      )
+  );
+
+  D.b.forEach(
+    f=>
+      fd.append(
+        'bodies',
+        f
+      )
+  );
+
+  D.c.forEach(
+    f=>
+      fd.append(
+        'ctas',
+        f
+      )
+  );
 
   $('go').disabled=true;
-  $('download').style.display='none';
+
+  $('download').style.display=
+    'none';
+
   $('result').innerHTML='';
-  $('bar').style.width='0%';
-  $('status').textContent='Enviando vídeos…';
+
+  $('originalitySummary').innerHTML='';
+
+  $('bar').style.width=
+    '0%';
+
+  $('status').textContent=
+    'Enviando vídeos…';
 
   try{
 
-    const r=await fetch('/api/jobs',{
-      method:'POST',
-      body:fd
-    });
+    const r=
+      await fetch(
+        '/api/jobs',
+        {
+          method:'POST',
+          body:fd
+        }
+      );
 
-    const j=await r.json();
+    const j=
+      await r.json();
 
     if(!r.ok){
-      throw Error(j.error||'Falha no envio');
+
+      throw Error(
+        j.error ||
+        'Falha no envio'
+      );
     }
 
     const poll=async()=>{
 
       const response=
-        await fetch('/api/jobs/'+j.id);
+        await fetch(
+          '/api/jobs/' +
+          encodeURIComponent(j.id)
+        );
 
       const x=
         await response.json();
 
+      if(!response.ok){
+
+        throw Error(
+          x.error ||
+          'Falha ao consultar processamento'
+        );
+      }
+
       const pct=
         x.total
-        ? Math.round(x.done/x.total*100)
+        ? Math.round(
+            x.done /
+            x.total *
+            100
+          )
         : 0;
 
-      $('bar').style.width=pct+'%';
+      $('bar').style.width=
+        pct + '%';
 
       $('status').textContent=
-        x.current||'Processando…';
+        x.current ||
+        'Processando…';
 
       if(x.files?.length){
 
+        renderOriginalitySummary(
+          x.files
+        );
+
         $('result').innerHTML=
-          x.files.map(f=>{
+          x.files
+            .map(f=>{
 
-            const videoUrl=
-              '/api/jobs/'
-              +encodeURIComponent(j.id)
-              +'/video/'
-              +encodeURIComponent(f.name);
+              const videoUrl=
+                '/api/jobs/' +
+                encodeURIComponent(j.id) +
+                '/video/' +
+                encodeURIComponent(f.name);
 
-            return `
-              <div class="combo">
+              const originality=
+                Number(
+                  f.originality
+                );
 
-                <b>✓ ${f.name}</b>
+              return `
+                <div class="combo">
 
-                <video
-                  class="preview"
-                  controls
-                  playsinline
-                  preload="metadata"
-                  src="${videoUrl}"
-                >
-                  Seu navegador não consegue reproduzir este vídeo.
-                </video>
+                  <b>
+                    ✓ ${escapeHtml(f.name)}
+                  </b>
 
-                <span class="pill">
-                  Gancho: ${f.hook}
-                </span>
+                  <div class="originality ${originalityClass(originality)}">
+                    <small>
+                      Originalidade estrutural
+                    </small>
+                    ${originality}%
+                  </div>
 
-                <span class="pill">
-                  Corpo: ${f.body}
-                </span>
+                  <video
+                    class="preview"
+                    controls
+                    playsinline
+                    preload="metadata"
+                    src="${videoUrl}"
+                  >
+                    Seu navegador não consegue reproduzir este vídeo.
+                  </video>
 
-                <span class="pill">
-                  CTA: ${f.cta}
-                </span>
+                  <span class="pill">
+                    Gancho:
+                    ${escapeHtml(f.hook)}
+                  </span>
 
-                <br>
+                  <span class="pill">
+                    Corpo:
+                    ${escapeHtml(f.body)}
+                  </span>
 
-                <span style="color:#aaa">
-                  Combinação única #${f.index}
-                </span>
+                  <span class="pill">
+                    CTA:
+                    ${escapeHtml(f.cta)}
+                  </span>
 
-                <a
-                  class="single-download"
-                  href="${videoUrl}"
-                  download="${f.name}"
-                >
-                  ⬇ Baixar este vídeo
-                </a>
+                  <br>
 
-              </div>
-            `;
+                  <span style="color:#aaa">
+                    Combinação única #${f.index}
+                  </span>
 
-          }).join('');
+                  <a
+                    class="single-download"
+                    href="${videoUrl}"
+                    download="${escapeHtml(f.name)}"
+                  >
+                    ⬇ Baixar este vídeo
+                  </a>
+
+                </div>
+              `;
+
+            })
+            .join('');
       }
 
       if(x.status==='done'){
 
-        $('bar').style.width='100%';
+        $('bar').style.width=
+          '100%';
 
-        $('download').href=x.zip;
+        $('download').href=
+          x.zip;
 
-        $('download').style.display='block';
+        $('download').style.display=
+          'block';
 
         $('status').textContent=
           `Concluído: ${x.total} vídeos.`;
 
-        $('go').disabled=false;
+        $('go').disabled=
+          false;
 
         return;
       }
 
       if(x.status==='error'){
+
         throw Error(
-          x.error||'Processamento falhou'
+          x.error ||
+          'Processamento falhou'
         );
       }
 
-      setTimeout(poll,1000);
+      setTimeout(
+        poll,
+        1000
+      );
     };
 
     poll();
@@ -528,11 +863,15 @@ $('go').onclick=async()=>{
   }catch(e){
 
     $('status').textContent=
-      'Erro: '+e.message;
+      'Erro: ' +
+      e.message;
 
-    alert(e.message);
+    alert(
+      e.message
+    );
 
-    $('go').disabled=false;
+    $('go').disabled=
+      false;
   }
 };
 </script>
