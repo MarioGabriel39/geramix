@@ -34,15 +34,32 @@ app.get("/health", (_, res) => {
   });
 });
 
+/*
+ * ======================================================
+ * CONFIGURAÇÕES
+ * ======================================================
+ *
+ * 3 FFmpegs simultâneos por padrão.
+ *
+ * Se o Render ficar sobrecarregado, podemos voltar para 2
+ * simplesmente alterando a variável FFMPEG_CONCURRENCY.
+ */
+
 const FFMPEG_CONCURRENCY = Math.max(
   1,
   Math.min(
     3,
-    Number(process.env.FFMPEG_CONCURRENCY || 2)
+    Number(process.env.FFMPEG_CONCURRENCY || 3)
   )
 );
 
 const MAX_COMBINATIONS = 1000;
+
+/*
+ * ======================================================
+ * EXECUTA FFMPEG
+ * ======================================================
+ */
 
 function runFFmpeg(args, cwd) {
   return new Promise((resolve, reject) => {
@@ -82,6 +99,12 @@ function runFFmpeg(args, cwd) {
   });
 }
 
+/*
+ * ======================================================
+ * VERIFICA ÁUDIO
+ * ======================================================
+ */
+
 async function hasAudio(input, cwd) {
   try {
     await runFFmpeg(
@@ -105,6 +128,12 @@ async function hasAudio(input, cwd) {
   }
 }
 
+/*
+ * ======================================================
+ * NOME SEGURO
+ * ======================================================
+ */
+
 function safeName(name) {
   return String(name || "video")
     .replace(
@@ -121,16 +150,20 @@ function safeName(name) {
  *
  * Cada vídeo de entrada é convertido UMA ÚNICA VEZ.
  *
- * Todos passam a ter:
+ * Resultado:
  * - 720x1280
- * - 30 fps
+ * - 30 FPS
  * - H.264
  * - AAC
  * - 48 kHz
  * - estéreo
- * - timestamps novos e contínuos
+ * - timestamps corrigidos
  *
- * Depois disso podemos concatenar por -c copy.
+ * IMPORTANTE:
+ * O arquivo intermediário NÃO recebe faststart.
+ *
+ * Isso economiza uma etapa de processamento.
+ * O faststart fica somente nos vídeos finais.
  */
 
 async function normalize(
@@ -148,8 +181,13 @@ async function normalize(
     "-c:v",
     "libx264",
 
+    /*
+     * Superfast é consideravelmente mais rápido
+     * que veryfast, mantendo boa qualidade para
+     * o objetivo do GeraMix.
+     */
     "-preset",
-    "veryfast",
+    "superfast",
 
     "-crf",
     "23",
@@ -173,10 +211,13 @@ async function normalize(
 
         "-c:a",
         "aac",
+
         "-ar",
         "48000",
+
         "-ac",
         "2",
+
         "-b:a",
         "128k",
 
@@ -188,9 +229,6 @@ async function normalize(
 
         "-avoid_negative_ts",
         "make_zero",
-
-        "-movflags",
-        "+faststart",
 
         "-y",
         output
@@ -205,6 +243,7 @@ async function normalize(
 
         "-f",
         "lavfi",
+
         "-i",
         "anullsrc=r=48000:cl=stereo",
 
@@ -212,15 +251,19 @@ async function normalize(
 
         "-map",
         "0:v:0",
+
         "-map",
         "1:a:0",
 
         "-c:a",
         "aac",
+
         "-ar",
         "48000",
+
         "-ac",
         "2",
+
         "-b:a",
         "128k",
 
@@ -231,9 +274,6 @@ async function normalize(
 
         "-avoid_negative_ts",
         "make_zero",
-
-        "-movflags",
-        "+faststart",
 
         "-y",
         output
@@ -248,16 +288,13 @@ async function normalize(
  * CONCATENAÇÃO
  * ======================================================
  *
- * Aqui os arquivos já estão padronizados.
+ * Os vídeos já chegam aqui padronizados.
  *
- * Como todos têm:
- * - mesmo codec
- * - mesma resolução
- * - mesmo FPS
- * - mesmo áudio
- * - timestamps corrigidos
+ * Por isso podemos usar:
  *
- * podemos juntar usando -c copy.
+ * -c copy
+ *
+ * Sem recodificar novamente.
  */
 
 async function concat3(
@@ -309,6 +346,9 @@ async function concat3(
         "-avoid_negative_ts",
         "make_zero",
 
+        /*
+         * Faststart SOMENTE no vídeo final.
+         */
         "-movflags",
         "+faststart",
 
@@ -329,7 +369,7 @@ async function concat3(
 
 /*
  * ======================================================
- * POOL
+ * POOL DE PROCESSAMENTO
  * ======================================================
  */
 
@@ -394,6 +434,22 @@ async function runPool(
  * ======================================================
  * NORMALIZAÇÃO DE TODAS AS ENTRADAS
  * ======================================================
+ *
+ * A principal otimização está aqui.
+ *
+ * ANTES:
+ *
+ *   todos os ganchos
+ *   depois todos os corpos
+ *   depois todos os CTAs
+ *
+ * AGORA:
+ *
+ *   ganchos + corpos + CTAs
+ *   entram no MESMO pool.
+ *
+ * Assim o Render pode trabalhar continuamente
+ * sem ficar esperando uma categoria terminar.
  */
 
 async function normalizeAll(
@@ -401,69 +457,86 @@ async function normalizeAll(
   dir,
   job
 ) {
-  const normalized = {};
+  const normalized = {
+    hooks: [],
+    bodies: [],
+    ctas: []
+  };
+
+  const allItems = [];
 
   for (
     const [key, arr]
     of Object.entries(cats)
   ) {
-    normalized[key] = [];
-
-    const items = arr.map(
-      (file, index) => ({
+    for (
+      const [index, file]
+      of arr.entries()
+    ) {
+      allItems.push({
+        key,
         file,
-        index
-      })
-    );
+        index,
+        total: arr.length
+      });
+    }
+  }
 
-    const label =
-      key === "hooks"
-        ? "ganchos"
-        : key === "bodies"
-        ? "corpos"
-        : "CTAs";
+  await runPool(
+    allItems,
 
-    await runPool(
-      items,
+    async ({
+      key,
+      file,
+      index,
+      total
+    }) => {
+      const label =
+        key === "hooks"
+          ? "ganchos"
+          : key === "bodies"
+          ? "corpos"
+          : "CTAs";
 
-      async ({
-        file,
-        index
-      }) => {
-        const out =
-          path.join(
-            dir,
-            `norm-${key}-${index}.mp4`
-          );
-
-        job.current =
-          `Preparando ${label} ${index + 1}/${arr.length}`;
-
-        await normalize(
-          file.path,
-          out,
-          dir
+      const out =
+        path.join(
+          dir,
+          `norm-${key}-${index}.mp4`
         );
 
-        normalized[key][index] = {
-          path: out,
-          name: safeName(
-            file.originalname
-          )
-        };
-      },
+      job.current =
+        `Preparando ${label} ${index + 1}/${total}`;
 
-      FFMPEG_CONCURRENCY,
+      await normalize(
+        file.path,
+        out,
+        dir
+      );
 
-      (done, amount) => {
-        job.current =
-          `Preparando ${label}: ${done}/${amount}`;
-      }
-    );
-  }
+      normalized[key][index] = {
+        path: out,
+        name: safeName(
+          file.originalname
+        )
+      };
+    },
+
+    FFMPEG_CONCURRENCY,
+
+    done => {
+      job.current =
+        `Preparando vídeos: ${done}/${allItems.length}`;
+    }
+  );
 
   return normalized;
 }
+
+/*
+ * ======================================================
+ * UPLOAD
+ * ======================================================
+ */
 
 const upload = multer({
   dest: UPLOADS,
@@ -575,7 +648,9 @@ app.post(
     });
 
     /*
-     * Processamento em segundo plano.
+     * ==================================================
+     * PROCESSAMENTO EM SEGUNDO PLANO
+     * ==================================================
      */
 
     (async () => {
@@ -587,11 +662,10 @@ app.post(
         };
 
         /*
-         * ------------------------------------------------
+         * ----------------------------------------------
          * ETAPA 1
-         *
-         * Cada entrada é processada UMA VEZ.
-         * ------------------------------------------------
+         * PADRONIZAÇÃO
+         * ----------------------------------------------
          */
 
         job.current =
@@ -605,8 +679,8 @@ app.post(
           );
 
         /*
-         * Agora os arquivos enviados
-         * podem ser apagados.
+         * Remove os arquivos originais enviados.
+         * Os arquivos normalizados continuam no job.
          */
 
         await Promise.all(
@@ -623,11 +697,10 @@ app.post(
         );
 
         /*
-         * ------------------------------------------------
+         * ----------------------------------------------
          * ETAPA 2
-         *
-         * Cria todas as combinações.
-         * ------------------------------------------------
+         * CRIA COMBINAÇÕES
+         * ----------------------------------------------
          */
 
         const combinations = [];
@@ -643,22 +716,20 @@ app.post(
             for (
               const c
               of normalized.ctas
-            ) {
-              combinations.push({
-                h,
-                b,
-                c
-              });
-            }
+          ) {
+            combinations.push({
+              h,
+              b,
+              c
+            });
           }
         }
 
         /*
-         * ------------------------------------------------
+         * ----------------------------------------------
          * ETAPA 3
-         *
-         * Concatenação rápida.
-         * ------------------------------------------------
+         * GERAÇÃO
+         * ----------------------------------------------
          */
 
         job.current =
@@ -727,9 +798,10 @@ app.post(
         );
 
         /*
-         * ------------------------------------------------
+         * ----------------------------------------------
+         * ETAPA 4
          * ZIP
-         * ------------------------------------------------
+         * ----------------------------------------------
          */
 
         job.current =
@@ -797,6 +869,12 @@ app.post(
           }
         );
 
+        /*
+         * ----------------------------------------------
+         * FINALIZADO
+         * ----------------------------------------------
+         */
+
         job.status =
           "done";
 
@@ -828,7 +906,7 @@ app.post(
 
 /*
  * ======================================================
- * STATUS
+ * STATUS DO JOB
  * ======================================================
  */
 
