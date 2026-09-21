@@ -401,21 +401,18 @@ async function normalizeAll(
   dir,
   job
 ) {
-  const normalized = {};
+  const normalized = {
+    hooks: [],
+    bodies: [],
+    ctas: []
+  };
+
+  const allItems = [];
 
   for (
     const [key, arr]
     of Object.entries(cats)
   ) {
-    normalized[key] = [];
-
-    const items = arr.map(
-      (file, index) => ({
-        file,
-        index
-      })
-    );
-
     const label =
       key === "hooks"
         ? "ganchos"
@@ -423,48 +420,62 @@ async function normalizeAll(
         ? "corpos"
         : "CTAs";
 
-    await runPool(
-      items,
-
-      async ({
-        file,
-        index
-      }) => {
-        const out =
-          path.join(
-            dir,
-            `norm-${key}-${index}.mp4`
-          );
-
-        job.current =
-          `Preparando ${label} ${index + 1}/${arr.length}`;
-
-        await normalize(
-          file.path,
-          out,
-          dir
-        );
-
-        normalized[key][index] = {
-          path: out,
-          name: safeName(
-            file.originalname
-          )
-        };
-      },
-
-      FFMPEG_CONCURRENCY,
-
-      (done, amount) => {
-        job.current =
-          `Preparando ${label}: ${done}/${amount}`;
+    arr.forEach(
+      (file, index) => {
+        allItems.push({
+          key,
+          label,
+          file,
+          index,
+          total: arr.length
+        });
       }
     );
   }
 
+  await runPool(
+    allItems,
+
+    async ({
+      key,
+      label,
+      file,
+      index,
+      total
+    }) => {
+      const out =
+        path.join(
+          dir,
+          `norm-${key}-${index}.mp4`
+        );
+
+      job.current =
+        `Preparando ${label} ${index + 1}/${total}`;
+
+      await normalize(
+        file.path,
+        out,
+        dir
+      );
+
+      normalized[key][index] = {
+        path: out,
+        name: safeName(
+          file.originalname
+        )
+      };
+    },
+
+    FFMPEG_CONCURRENCY,
+
+    (done, amount) => {
+      job.current =
+        `Preparando vídeos: ${done}/${amount}`;
+    }
+  );
+
   return normalized;
 }
-
 const upload = multer({
   dest: UPLOADS,
 
