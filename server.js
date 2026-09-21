@@ -222,6 +222,7 @@ async function normalize(
  * - evita preservar timestamps quebrados dos arquivos originais.
  */
 async function concat3(
+async function concat3(
   a,
   b,
   c,
@@ -250,15 +251,10 @@ async function concat3(
   try {
     await runFFmpeg(
       [
-        "-fflags",
-        "+genpts",
-
         "-f",
         "concat",
-
         "-safe",
         "0",
-
         "-i",
         list,
 
