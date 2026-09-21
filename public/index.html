@@ -191,13 +191,13 @@ button:disabled{
 }
 
 .result{
-  max-height:360px;
+  max-height:500px;
   overflow:auto;
   margin-top:13px;
 }
 
 .combo{
-  padding:11px;
+  padding:14px 4px;
   border-bottom:1px solid rgba(255,255,255,.08);
   font-size:12px;
 }
@@ -210,6 +210,30 @@ button:disabled{
   padding:5px 7px;
   margin:3px 2px;
   color:#d9deed;
+}
+
+.single-download{
+  display:block;
+  width:100%;
+  margin-top:9px;
+  padding:10px 12px;
+  border-radius:11px;
+  text-align:center;
+  text-decoration:none;
+  font-size:13px;
+  font-weight:850;
+  color:#fff;
+  background:linear-gradient(
+    90deg,
+    rgba(22,217,255,.20),
+    rgba(142,92,255,.20),
+    rgba(255,59,152,.20)
+  );
+  border:1px solid rgba(255,255,255,.12);
+}
+
+.single-download:active{
+  transform:scale(.98);
 }
 
 .note{
@@ -303,7 +327,7 @@ button:disabled{
   <div id="status" class="status">Pronto.</div>
 
   <a id="download" class="download" style="display:none" href="#">
-    ⬇ Baixar ZIP
+    ⬇ Baixar todos em ZIP
   </a>
 
   <div id="result" class="result"></div>
@@ -326,8 +350,12 @@ const D={h:[],b:[],c:[]},$=id=>document.getElementById(id);
 function setup(id,k,list){
   $(id).onchange=e=>{
     D[k]=[...e.target.files];
-    $(list).innerHTML=D[k].map((f,i)=>`<div class=file>${i+1}. ${f.name}</div>`).join('');
-    update()
+
+    $(list).innerHTML=D[k]
+      .map((f,i)=>`<div class="file">${i+1}. ${f.name}</div>`)
+      .join('');
+
+    update();
   }
 }
 
@@ -335,7 +363,10 @@ function update(){
   $('hn').textContent=D.h.length;
   $('bn').textContent=D.b.length;
   $('cn').textContent=D.c.length;
-  $('total').textContent=(D.h.length*D.b.length*D.c.length).toLocaleString('pt-BR')
+
+  $('total').textContent=
+    (D.h.length*D.b.length*D.c.length)
+    .toLocaleString('pt-BR');
 }
 
 setup('hooks','h','hl');
@@ -343,9 +374,10 @@ setup('bodies','b','bl');
 setup('ctas','c','cl');
 
 $('go').onclick=async()=>{
+
   if(!D.h.length||!D.b.length||!D.c.length){
     alert('Selecione pelo menos 1 vídeo em cada categoria.');
-    return
+    return;
   }
 
   const fd=new FormData();
@@ -361,33 +393,106 @@ $('go').onclick=async()=>{
   $('status').textContent='Enviando vídeos…';
 
   try{
-    const r=await fetch('/api/jobs',{method:'POST',body:fd});
+
+    const r=await fetch('/api/jobs',{
+      method:'POST',
+      body:fd
+    });
+
     const j=await r.json();
 
-    if(!r.ok)throw Error(j.error||'Falha no envio');
+    if(!r.ok){
+      throw Error(j.error||'Falha no envio');
+    }
 
     const poll=async()=>{
-      const x=await (await fetch('/api/jobs/'+j.id)).json();
 
-      const pct=x.total?Math.round(x.done/x.total*100):0;
+      const response=
+        await fetch('/api/jobs/'+j.id);
+
+      const x=
+        await response.json();
+
+      const pct=
+        x.total
+        ? Math.round(x.done/x.total*100)
+        : 0;
 
       $('bar').style.width=pct+'%';
-      $('status').textContent=x.current||'Processando…';
 
-      if(x.files?.length)
-        $('result').innerHTML=x.files.map(f=>`<div class=combo><b>✓ ${f.name}</b><br><span class=pill>Gancho: ${f.hook}</span><span class=pill>Corpo: ${f.body}</span><span class=pill>CTA: ${f.cta}</span><br><span style="color:#aaa">Combinação única #${f.index}</span></div>`).join('');
+      $('status').textContent=
+        x.current||'Processando…';
+
+      if(x.files?.length){
+
+        $('result').innerHTML=
+          x.files.map(f=>{
+
+            const videoUrl=
+              '/api/jobs/'
+              +encodeURIComponent(j.id)
+              +'/video/'
+              +encodeURIComponent(f.name);
+
+            return `
+              <div class="combo">
+
+                <b>✓ ${f.name}</b>
+
+                <br>
+
+                <span class="pill">
+                  Gancho: ${f.hook}
+                </span>
+
+                <span class="pill">
+                  Corpo: ${f.body}
+                </span>
+
+                <span class="pill">
+                  CTA: ${f.cta}
+                </span>
+
+                <br>
+
+                <span style="color:#aaa">
+                  Combinação única #${f.index}
+                </span>
+
+                <a
+                  class="single-download"
+                  href="${videoUrl}"
+                  download="${f.name}"
+                >
+                  ⬇ Baixar este vídeo
+                </a>
+
+              </div>
+            `;
+
+          }).join('');
+      }
 
       if(x.status==='done'){
+
         $('bar').style.width='100%';
+
         $('download').href=x.zip;
+
         $('download').style.display='block';
-        $('status').textContent=`Concluído: ${x.total} vídeos.`;
+
+        $('status').textContent=
+          `Concluído: ${x.total} vídeos.`;
+
         $('go').disabled=false;
-        return
+
+        return;
       }
 
       if(x.status==='error'){
-        throw Error(x.error||'Processamento falhou')
+        throw Error(
+          x.error||'Processamento falhou'
+        );
       }
 
       setTimeout(poll,1000);
@@ -396,9 +501,13 @@ $('go').onclick=async()=>{
     poll();
 
   }catch(e){
-    $('status').textContent='Erro: '+e.message;
+
+    $('status').textContent=
+      'Erro: '+e.message;
+
     alert(e.message);
-    $('go').disabled=false
+
+    $('go').disabled=false;
   }
 };
 </script>
