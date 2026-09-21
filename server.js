@@ -115,8 +115,16 @@ function safeName(name) {
 }
 
 /*
- * Normalização usada somente
- * quando a concatenação direta não funcionar.
+ * Normaliza cada vídeo antes da montagem.
+ *
+ * Todos os vídeos passam a ter:
+ * - 720x1280
+ * - 30 FPS
+ * - H.264
+ * - AAC
+ * - 48 kHz
+ * - estéreo
+ * - timestamps corrigidos
  */
 async function normalize(
   input,
@@ -137,7 +145,16 @@ async function normalize(
     "veryfast",
 
     "-crf",
-    "23"
+    "23",
+
+    "-pix_fmt",
+    "yuv420p",
+
+    "-r",
+    "30",
+
+    "-vsync",
+    "cfr"
   ];
 
   if (audio) {
@@ -164,6 +181,9 @@ async function normalize(
 
         "-af",
         "aresample=async=1",
+
+        "-avoid_negative_ts",
+        "make_zero",
 
         "-movflags",
         "+faststart",
@@ -202,6 +222,9 @@ async function normalize(
 
         "-shortest",
 
+        "-avoid_negative_ts",
+        "make_zero",
+
         "-movflags",
         "+faststart",
 
@@ -214,12 +237,10 @@ async function normalize(
 }
 
 /*
- * Concatenação rápida.
+ * Junta 3 vídeos já normalizados.
  *
- * IMPORTANTE:
- * - mantém -c copy para evitar recodificação;
- * - usa genpts para reconstruir timestamps;
- * - evita preservar timestamps quebrados dos arquivos originais.
+ * Como todos foram padronizados antes,
+ * podemos usar -c copy aqui.
  */
 async function concat3(
   a,
@@ -250,9 +271,6 @@ async function concat3(
   try {
     await runFFmpeg(
       [
-        "-fflags",
-        "+genpts",
-
         "-f",
         "concat",
 
@@ -265,7 +283,7 @@ async function concat3(
         "-map",
         "0:v:0",
         "-map",
-        "0:a:0?",
+        "0:a:0",
 
         "-c",
         "copy",
@@ -353,13 +371,22 @@ async function normalizeAll(
   dir,
   job
 ) {
-  const normalized = {};
+  const normalized = {
+    hooks: [],
+    bodies: [],
+    ctas: []
+  };
 
   for (
     const [key, arr]
     of Object.entries(cats)
   ) {
-    normalized[key] = [];
+    const label =
+      key === "hooks"
+        ? "ganchos"
+        : key === "bodies"
+        ? "corpos"
+        : "CTAs";
 
     const items = arr.map(
       (file, index) => ({
@@ -367,13 +394,6 @@ async function normalizeAll(
         index
       })
     );
-
-    const label =
-      key === "hooks"
-        ? "ganchos"
-        : key === "bodies"
-        ? "corpos"
-        : "CTAs";
 
     await runPool(
       items,
@@ -403,13 +423,6 @@ async function normalizeAll(
             file.originalname
           )
         };
-
-        await fsp.rm(
-          file.path,
-          {
-            force: true
-          }
-        );
       },
 
       FFMPEG_CONCURRENCY,
@@ -514,7 +527,7 @@ app.post(
       current: "Iniciando…",
       files: [],
       error: null,
-      mode: "direto"
+      mode: "normalizado"
     };
 
     jobs.set(
@@ -535,36 +548,26 @@ app.post(
           ctas
         };
 
-        const normalized = {
-          hooks: hooks.map(
-            file => ({
-              path: file.path,
-              name: safeName(
-                file.originalname
-              )
-            })
-          ),
+        /*
+         * PRIMEIRO:
+         * todos os vídeos são normalizados.
+         */
+        job.current =
+          "Preparando vídeos…";
 
-          bodies: bodies.map(
-            file => ({
-              path: file.path,
-              name: safeName(
-                file.originalname
-              )
-            })
-          ),
+        const normalized =
+          await normalizeAll(
+            cats,
+            dir,
+            job
+          );
 
-          ctas: ctas.map(
-            file => ({
-              path: file.path,
-              name: safeName(
-                file.originalname
-              )
-            })
-          )
-        };
-
-        let combinations = [];
+        /*
+         * Depois que todos os vídeos
+         * estiverem padronizados,
+         * criamos as combinações.
+         */
+        const combinations = [];
 
         for (
           const h
@@ -588,201 +591,70 @@ app.post(
         }
 
         job.current =
-          "Gerando vídeos diretamente…";
+          "Montando vídeos…";
 
-        let directFailed = false;
+        await runPool(
+          combinations,
 
-        try {
-          await runPool(
-            combinations,
+          async ({
+            h,
+            b,
+            c
+          }, index) => {
+            const n =
+              index + 1;
 
-            async ({
-              h,
-              b,
-              c
-            }, index) => {
-              const n =
-                index + 1;
-
-              const out =
-                path.join(
-                  dir,
-                  `video-${String(n).padStart(3, "0")}.mp4`
-                );
-
-              job.current =
-                `Gerando vídeos: ${n}/${total}`;
-
-              await concat3(
-                h.path,
-                b.path,
-                c.path,
-                out,
-                dir
+            const out =
+              path.join(
+                dir,
+                `video-${String(n).padStart(3, "0")}.mp4`
               );
 
-              job.files.push({
-                name:
-                  path.basename(
-                    out
-                  ),
+            job.current =
+              `Gerando vídeos: ${n}/${total}`;
 
-                hook:
-                  h.name,
-
-                body:
-                  b.name,
-
-                cta:
-                  c.name,
-
-                index: n
-              });
-
-              job.done =
-                job.files.length;
-            },
-
-            FFMPEG_CONCURRENCY
-          );
-        } catch (error) {
-          directFailed = true;
-
-          console.log(
-            "Concatenação direta não foi possível:",
-            error.message
-          );
-        }
-
-        if (directFailed) {
-          job.mode =
-            "compatibilização";
-
-          job.done = 0;
-          job.files = [];
-
-          job.current =
-            "Compatibilizando vídeos…";
-
-          const existing =
-            await fsp.readdir(
+            await concat3(
+              h.path,
+              b.path,
+              c.path,
+              out,
               dir
             );
 
-          await Promise.all(
-            existing
-              .filter(
-                name =>
-                  name.startsWith(
-                    "video-"
-                  )
-              )
-              .map(
-                name =>
-                  fsp.rm(
-                    path.join(
-                      dir,
-                      name
-                    ),
-                    {
-                      force: true
-                    }
-                  )
-              )
-          );
+            job.files.push({
+              name:
+                path.basename(
+                  out
+                ),
 
-          const fixed =
-            await normalizeAll(
-              cats,
-              dir,
-              job
-            );
+              hook:
+                h.name,
 
-          combinations = [];
+              body:
+                b.name,
 
-          for (
-            const h
-            of fixed.hooks
-          ) {
-            for (
-              const b
-              of fixed.bodies
-            ) {
-              for (
-                const c
-                of fixed.ctas
-              ) {
-                combinations.push({
-                  h,
-                  b,
-                  c
-                });
-              }
-            }
-          }
+              cta:
+                c.name,
 
-          job.current =
-            "Gerando vídeos compatibilizados…";
+              index: n
+            });
 
-          await runPool(
-            combinations,
+            job.done =
+              job.files.length;
+          },
 
-            async ({
-              h,
-              b,
-              c
-            }, index) => {
-              const n =
-                index + 1;
-
-              const out =
-                path.join(
-                  dir,
-                  `video-${String(n).padStart(3, "0")}.mp4`
-                );
-
-              await concat3(
-                h.path,
-                b.path,
-                c.path,
-                out,
-                dir
-              );
-
-              job.files.push({
-                name:
-                  path.basename(
-                    out
-                  ),
-
-                hook:
-                  h.name,
-
-                body:
-                  b.name,
-
-                cta:
-                  c.name,
-
-                index: n
-              });
-
-              job.done =
-                job.files.length;
-
-              job.current =
-                `Gerando vídeos: ${job.done}/${total}`;
-            },
-
-            FFMPEG_CONCURRENCY
-          );
-        }
+          FFMPEG_CONCURRENCY
+        );
 
         job.files.sort(
           (a, b) =>
             a.index - b.index
         );
 
+        /*
+         * Remove os arquivos enviados
+         * originalmente pelo usuário.
+         */
         await Promise.all(
           [...hooks, ...bodies, ...ctas]
             .map(
@@ -885,6 +757,19 @@ app.post(
 
         job.current =
           "Falhou";
+
+        await Promise.all(
+          [...hooks, ...bodies, ...ctas]
+            .map(
+              file =>
+                fsp.rm(
+                  file.path,
+                  {
+                    force: true
+                  }
+                )
+            )
+        );
       }
     })();
   }
