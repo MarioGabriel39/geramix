@@ -212,10 +212,23 @@ button:disabled{
   color:#d9deed;
 }
 
+.preview{
+  display:block;
+  width:100%;
+  max-height:520px;
+  margin-top:12px;
+  border-radius:15px;
+  background:#000;
+  border:1px solid rgba(255,255,255,.10);
+  object-fit:contain;
+  box-shadow:
+    0 8px 25px rgba(0,0,0,.30);
+}
+
 .single-download{
   display:block;
   width:100%;
-  margin-top:9px;
+  margin-top:10px;
   padding:10px 12px;
   border-radius:11px;
   text-align:center;
@@ -255,6 +268,10 @@ button:disabled{
   .card{
     padding:16px;
     border-radius:20px;
+  }
+
+  .preview{
+    max-height:500px;
   }
 }
 </style>
@@ -439,7 +456,15 @@ $('go').onclick=async()=>{
 
                 <b>✓ ${f.name}</b>
 
-                <br>
+                <video
+                  class="preview"
+                  controls
+                  playsinline
+                  preload="metadata"
+                  src="${videoUrl}"
+                >
+                  Seu navegador não consegue reproduzir este vídeo.
+                </video>
 
                 <span class="pill">
                   Gancho: ${f.hook}
