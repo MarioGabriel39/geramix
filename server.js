@@ -34,27 +34,15 @@ app.get("/health", (_, res) => {
   });
 });
 
-/*
- * ======================================================
- * CONFIGURAÇÕES
- * ======================================================
- */
-
 const FFMPEG_CONCURRENCY = Math.max(
   1,
   Math.min(
-    2,
+    3,
     Number(process.env.FFMPEG_CONCURRENCY || 2)
   )
 );
 
 const MAX_COMBINATIONS = 1000;
-
-/*
- * ======================================================
- * EXECUTA FFMPEG
- * ======================================================
- */
 
 function runFFmpeg(args, cwd) {
   return new Promise((resolve, reject) => {
@@ -94,12 +82,6 @@ function runFFmpeg(args, cwd) {
   });
 }
 
-/*
- * ======================================================
- * VERIFICA ÁUDIO
- * ======================================================
- */
-
 async function hasAudio(input, cwd) {
   try {
     await runFFmpeg(
@@ -122,12 +104,6 @@ async function hasAudio(input, cwd) {
     return false;
   }
 }
-
-/*
- * ======================================================
- * NOME SEGURO
- * ======================================================
- */
 
 function safeName(name) {
   return String(name || "video")
@@ -272,7 +248,7 @@ async function normalize(
  * CONCATENAÇÃO
  * ======================================================
  *
- * Os arquivos já estão padronizados.
+ * Aqui os arquivos já estão padronizados.
  *
  * Como todos têm:
  * - mesmo codec
@@ -418,21 +394,6 @@ async function runPool(
  * ======================================================
  * NORMALIZAÇÃO DE TODAS AS ENTRADAS
  * ======================================================
- *
- * IMPORTANTE:
- *
- * Antes:
- *
- *   todos os ganchos
- *   depois todos os corpos
- *   depois todos os CTAs
- *
- * Agora:
- *
- *   ganchos + corpos + CTAs
- *   entram na MESMA fila.
- *
- * Mantemos somente 2 FFmpeg simultâneos.
  */
 
 async function normalizeAll(
@@ -440,86 +401,69 @@ async function normalizeAll(
   dir,
   job
 ) {
-  const normalized = {
-    hooks: [],
-    bodies: [],
-    ctas: []
-  };
-
-  const allItems = [];
+  const normalized = {};
 
   for (
     const [key, arr]
     of Object.entries(cats)
   ) {
-    for (
-      const [index, file]
-      of arr.entries()
-    ) {
-      allItems.push({
-        key,
+    normalized[key] = [];
+
+    const items = arr.map(
+      (file, index) => ({
         file,
-        index,
-        total: arr.length
-      });
-    }
-  }
+        index
+      })
+    );
 
-  await runPool(
-    allItems,
+    const label =
+      key === "hooks"
+        ? "ganchos"
+        : key === "bodies"
+        ? "corpos"
+        : "CTAs";
 
-    async ({
-      key,
-      file,
-      index,
-      total
-    }) => {
-      const label =
-        key === "hooks"
-          ? "ganchos"
-          : key === "bodies"
-          ? "corpos"
-          : "CTAs";
+    await runPool(
+      items,
 
-      const out =
-        path.join(
-          dir,
-          `norm-${key}-${index}.mp4`
+      async ({
+        file,
+        index
+      }) => {
+        const out =
+          path.join(
+            dir,
+            `norm-${key}-${index}.mp4`
+          );
+
+        job.current =
+          `Preparando ${label} ${index + 1}/${arr.length}`;
+
+        await normalize(
+          file.path,
+          out,
+          dir
         );
 
-      job.current =
-        `Preparando ${label} ${index + 1}/${total}`;
+        normalized[key][index] = {
+          path: out,
+          name: safeName(
+            file.originalname
+          )
+        };
+      },
 
-      await normalize(
-        file.path,
-        out,
-        dir
-      );
+      FFMPEG_CONCURRENCY,
 
-      normalized[key][index] = {
-        path: out,
-        name: safeName(
-          file.originalname
-        )
-      };
-    },
-
-    FFMPEG_CONCURRENCY,
-
-    (done, amount) => {
-      job.current =
-        `Preparando vídeos: ${done}/${amount}`;
-    }
-  );
+      (done, amount) => {
+        job.current =
+          `Preparando ${label}: ${done}/${amount}`;
+      }
+    );
+  }
 
   return normalized;
 }
-
-/*
- * ======================================================
- * UPLOAD
- * ======================================================
- */
 
 const upload = multer({
   dest: UPLOADS,
@@ -631,9 +575,7 @@ app.post(
     });
 
     /*
-     * ==================================================
-     * PROCESSAMENTO EM SEGUNDO PLANO
-     * ==================================================
+     * Processamento em segundo plano.
      */
 
     (async () => {
@@ -645,12 +587,11 @@ app.post(
         };
 
         /*
-         * ----------------------------------------------
+         * ------------------------------------------------
          * ETAPA 1
          *
          * Cada entrada é processada UMA VEZ.
-         * Agora todas entram na mesma fila.
-         * ----------------------------------------------
+         * ------------------------------------------------
          */
 
         job.current =
@@ -664,7 +605,8 @@ app.post(
           );
 
         /*
-         * Remove os arquivos originais enviados.
+         * Agora os arquivos enviados
+         * podem ser apagados.
          */
 
         await Promise.all(
@@ -681,11 +623,11 @@ app.post(
         );
 
         /*
-         * ----------------------------------------------
+         * ------------------------------------------------
          * ETAPA 2
          *
          * Cria todas as combinações.
-         * ----------------------------------------------
+         * ------------------------------------------------
          */
 
         const combinations = [];
@@ -701,21 +643,22 @@ app.post(
             for (
               const c
               of normalized.ctas
-          ) {
-            combinations.push({
-              h,
-              b,
-              c
-            });
+            ) {
+              combinations.push({
+                h,
+                b,
+                c
+              });
+            }
           }
         }
 
         /*
-         * ----------------------------------------------
+         * ------------------------------------------------
          * ETAPA 3
          *
-         * Concatenação.
-         * ----------------------------------------------
+         * Concatenação rápida.
+         * ------------------------------------------------
          */
 
         job.current =
@@ -784,10 +727,9 @@ app.post(
         );
 
         /*
-         * ----------------------------------------------
-         * ETAPA 4
+         * ------------------------------------------------
          * ZIP
-         * ----------------------------------------------
+         * ------------------------------------------------
          */
 
         job.current =
@@ -854,12 +796,6 @@ app.post(
             archive.finalize();
           }
         );
-
-        /*
-         * ----------------------------------------------
-         * FINALIZADO
-         * ----------------------------------------------
-         */
 
         job.status =
           "done";
