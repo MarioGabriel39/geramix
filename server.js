@@ -34,9 +34,6 @@ app.get("/health", (_, res) => {
   });
 });
 
-/*
- * Quantidade máxima de FFmpeg trabalhando simultaneamente.
- */
 const FFMPEG_CONCURRENCY = Math.max(
   1,
   Math.min(
@@ -47,9 +44,6 @@ const FFMPEG_CONCURRENCY = Math.max(
 
 const MAX_COMBINATIONS = 1000;
 
-/*
- * Executa FFmpeg.
- */
 function runFFmpeg(args, cwd) {
   return new Promise((resolve, reject) => {
     const p = spawn(
@@ -88,9 +82,6 @@ function runFFmpeg(args, cwd) {
   });
 }
 
-/*
- * Verifica se o vídeo possui áudio.
- */
 async function hasAudio(input, cwd) {
   try {
     await runFFmpeg(
@@ -114,9 +105,6 @@ async function hasAudio(input, cwd) {
   }
 }
 
-/*
- * Limpa nomes de arquivos.
- */
 function safeName(name) {
   return String(name || "video")
     .replace(
@@ -127,8 +115,8 @@ function safeName(name) {
 }
 
 /*
- * Normalização usada SOMENTE quando
- * a concatenação direta não for possível.
+ * Normalização usada somente
+ * quando a concatenação direta não funcionar.
  */
 async function normalize(
   input,
@@ -226,10 +214,12 @@ async function normalize(
 }
 
 /*
- * Concatenação direta.
+ * Concatenação rápida.
  *
- * Esta é a primeira tentativa.
- * Não recodifica vídeo.
+ * IMPORTANTE:
+ * - mantém -c copy para evitar recodificação;
+ * - usa genpts para reconstruir timestamps;
+ * - evita preservar timestamps quebrados dos arquivos originais.
  */
 async function concat3(
   a,
@@ -260,6 +250,9 @@ async function concat3(
   try {
     await runFFmpeg(
       [
+        "-fflags",
+        "+genpts",
+
         "-f",
         "concat",
 
@@ -269,8 +262,16 @@ async function concat3(
         "-i",
         list,
 
+        "-map",
+        "0:v:0",
+        "-map",
+        "0:a:0?",
+
         "-c",
         "copy",
+
+        "-avoid_negative_ts",
+        "make_zero",
 
         "-movflags",
         "+faststart",
@@ -290,9 +291,6 @@ async function concat3(
   }
 }
 
-/*
- * Pool de tarefas.
- */
 async function runPool(
   items,
   worker,
@@ -350,10 +348,6 @@ async function runPool(
   );
 }
 
-/*
- * Normaliza todos os vídeos somente
- * quando a concatenação direta falhar.
- */
 async function normalizeAll(
   cats,
   dir,
@@ -533,9 +527,6 @@ app.post(
       total
     });
 
-    /*
-     * Processamento em segundo plano.
-     */
     (async () => {
       try {
         const cats = {
@@ -543,13 +534,6 @@ app.post(
           bodies,
           ctas
         };
-
-        /*
-         * ------------------------------------------------
-         * PRIMEIRA TENTATIVA:
-         * usar os vídeos originais diretamente.
-         * ------------------------------------------------
-         */
 
         const normalized = {
           hooks: hooks.map(
@@ -580,9 +564,6 @@ app.post(
           )
         };
 
-        /*
-         * Cria todas as combinações.
-         */
         let combinations = [];
 
         for (
@@ -605,12 +586,6 @@ app.post(
             }
           }
         }
-
-        /*
-         * ------------------------------------------------
-         * PRIMEIRA GERAÇÃO DIRETA
-         * ------------------------------------------------
-         */
 
         job.current =
           "Gerando vídeos diretamente…";
@@ -679,13 +654,6 @@ app.post(
           );
         }
 
-        /*
-         * ------------------------------------------------
-         * SE A CONCATENAÇÃO DIRETA FALHOU:
-         * limpa os resultados e normaliza.
-         * ------------------------------------------------
-         */
-
         if (directFailed) {
           job.mode =
             "compatibilização";
@@ -696,9 +664,6 @@ app.post(
           job.current =
             "Compatibilizando vídeos…";
 
-          /*
-           * Remove vídeos parciais.
-           */
           const existing =
             await fsp.readdir(
               dir
@@ -726,10 +691,6 @@ app.post(
               )
           );
 
-          /*
-           * Agora sim fazemos a
-           * normalização pesada.
-           */
           const fixed =
             await normalizeAll(
               cats,
@@ -817,17 +778,11 @@ app.post(
           );
         }
 
-        /*
-         * Ordena os resultados.
-         */
         job.files.sort(
           (a, b) =>
             a.index - b.index
         );
 
-        /*
-         * Apaga uploads originais.
-         */
         await Promise.all(
           [...hooks, ...bodies, ...ctas]
             .map(
@@ -840,12 +795,6 @@ app.post(
                 )
             )
         );
-
-        /*
-         * ------------------------------------------------
-         * ZIP
-         * ------------------------------------------------
-         */
 
         job.current =
           "Criando ZIP…";
