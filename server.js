@@ -115,6 +115,52 @@ function safeName(name) {
 }
 
 /*
+ * Calcula a originalidade estrutural
+ * comparando a combinação atual com
+ * a combinação imediatamente anterior.
+ *
+ * 3 componentes diferentes = 100%
+ * 2 componentes diferentes = 90%
+ * 1 componente diferente = 80%
+ * 0 componentes diferentes = 70%
+ *
+ * O primeiro vídeo do lote sempre recebe 100%.
+ */
+function calculateOriginality(
+  current,
+  previous
+) {
+  if (!previous) {
+    return 100;
+  }
+
+  let different = 0;
+
+  if (
+    current.hook.path !==
+    previous.hook.path
+  ) {
+    different++;
+  }
+
+  if (
+    current.body.path !==
+    previous.body.path
+  ) {
+    different++;
+  }
+
+  if (
+    current.cta.path !==
+    previous.cta.path
+  ) {
+    different++;
+  }
+
+  return 70 + (different * 10);
+}
+
+/*
  * Monta HOOK + BODY + CTA em uma única operação FFmpeg.
  *
  * A operação:
@@ -527,6 +573,12 @@ app.post(
               dir
             );
 
+            const originality =
+              calculateOriginality(
+                combinations[index],
+                combinations[index - 1]
+              );
+
             job.files.push({
               name:
                 path.basename(
@@ -548,7 +600,9 @@ app.post(
                   cta.originalname
                 ),
 
-              index: n
+              index: n,
+
+              originality
             });
 
             job.done =
