@@ -115,28 +115,160 @@ function safeName(name) {
 }
 
 /*
- * Normaliza cada vídeo antes da montagem.
+ * Monta HOOK + BODY + CTA em uma única operação FFmpeg.
  *
- * Todos os vídeos passam a ter:
- * - 720x1280
- * - 30 FPS
- * - H.264
- * - AAC
- * - 48 kHz
- * - estéreo
- * - timestamps corrigidos
+ * A operação:
+ * - corrige timestamps
+ * - padroniza vídeo para 720x1280
+ * - padroniza para 30 FPS
+ * - padroniza áudio para AAC / 48 kHz / estéreo
+ * - concatena os 3 vídeos
+ * - gera somente UM arquivo final
+ *
+ * Isso evita reencodar cada vídeo de entrada separadamente.
  */
-async function normalize(
-  input,
+async function concat3(
+  hook,
+  body,
+  cta,
   output,
   cwd
 ) {
-  const audio =
-    await hasAudio(input, cwd);
+  const inputs = [
+    hook,
+    body,
+    cta
+  ];
 
-  const videoArgs = [
-    "-vf",
-    "scale=720:1280:force_original_aspect_ratio=decrease,pad=720:1280:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=30",
+  const audioFlags = [];
+
+  for (const input of inputs) {
+    audioFlags.push(
+      await hasAudio(input, cwd)
+    );
+  }
+
+  const args = [];
+
+  /*
+   * Entradas de vídeo.
+   */
+  for (const input of inputs) {
+    args.push(
+      "-i",
+      input
+    );
+  }
+
+  /*
+   * Para vídeos sem áudio, adicionamos uma
+   * fonte silenciosa correspondente.
+   */
+  const silentIndexes = [];
+
+  for (let i = 0; i < inputs.length; i++) {
+    if (!audioFlags[i]) {
+      const silentIndex =
+        inputs.length +
+        silentIndexes.length;
+
+      silentIndexes.push(
+        silentIndex
+      );
+
+      args.push(
+        "-f",
+        "lavfi",
+        "-t",
+        "86400",
+        "-i",
+        "anullsrc=r=48000:cl=stereo"
+      );
+    }
+  }
+
+  const filterParts = [];
+
+  /*
+   * Prepara cada vídeo:
+   * - escala
+   * - preenchimento
+   * - SAR correto
+   * - 30 FPS
+   * - timestamps começando em zero
+   */
+  for (let i = 0; i < inputs.length; i++) {
+    filterParts.push(
+      `[${i}:v:0]` +
+      `scale=720:1280:force_original_aspect_ratio=decrease,` +
+      `pad=720:1280:(ow-iw)/2:(oh-ih)/2,` +
+      `setsar=1,` +
+      `fps=30,` +
+      `format=yuv420p,` +
+      `setpts=PTS-STARTPTS` +
+      `[v${i}]`
+    );
+  }
+
+  /*
+   * Prepara cada áudio.
+   */
+  let silentCounter = 0;
+
+  for (let i = 0; i < inputs.length; i++) {
+    if (audioFlags[i]) {
+      filterParts.push(
+        `[${i}:a:0]` +
+        `aresample=48000,` +
+        `aformat=sample_rates=48000:channel_layouts=stereo,` +
+        `asetpts=PTS-STARTPTS` +
+        `[a${i}]`
+      );
+    } else {
+      const silentIndex =
+        inputs.length +
+        silentCounter;
+
+      filterParts.push(
+        `[${silentIndex}:a:0]` +
+        `asetpts=PTS-STARTPTS` +
+        `[a${i}]`
+      );
+
+      silentCounter++;
+    }
+  }
+
+  /*
+   * Entrada do concat:
+   *
+   * [v0][a0][v1][a1][v2][a2]
+   */
+  let concatInputs = "";
+
+  for (let i = 0; i < inputs.length; i++) {
+    concatInputs +=
+      `[v${i}][a${i}]`;
+  }
+
+  filterParts.push(
+    `${concatInputs}` +
+    `concat=n=3:v=1:a=1:` +
+    `[vout][aout]`
+  );
+
+  const filterComplex =
+    filterParts.join(";");
+
+  args.push(
+    "-filter_complex",
+    filterComplex,
+
+    "-map",
+    "[vout]",
+
+    "-map",
+    "[aout]",
 
     "-c:v",
     "libx264",
@@ -153,160 +285,29 @@ async function normalize(
     "-r",
     "30",
 
-    "-vsync",
-    "cfr"
-  ];
+    "-c:a",
+    "aac",
 
-  if (audio) {
-    await runFFmpeg(
-      [
-        "-i",
-        input,
+    "-ar",
+    "48000",
 
-        ...videoArgs,
+    "-ac",
+    "2",
 
-        "-map",
-        "0:v:0",
-        "-map",
-        "0:a:0",
+    "-b:a",
+    "128k",
 
-        "-c:a",
-        "aac",
-        "-ar",
-        "48000",
-        "-ac",
-        "2",
-        "-b:a",
-        "128k",
+    "-movflags",
+    "+faststart",
 
-        "-af",
-        "aresample=async=1",
-
-        "-avoid_negative_ts",
-        "make_zero",
-
-        "-movflags",
-        "+faststart",
-
-        "-y",
-        output
-      ],
-      cwd
-    );
-  } else {
-    await runFFmpeg(
-      [
-        "-i",
-        input,
-
-        "-f",
-        "lavfi",
-        "-i",
-        "anullsrc=r=48000:cl=stereo",
-
-        ...videoArgs,
-
-        "-map",
-        "0:v:0",
-        "-map",
-        "1:a:0",
-
-        "-c:a",
-        "aac",
-        "-ar",
-        "48000",
-        "-ac",
-        "2",
-        "-b:a",
-        "128k",
-
-        "-shortest",
-
-        "-avoid_negative_ts",
-        "make_zero",
-
-        "-movflags",
-        "+faststart",
-
-        "-y",
-        output
-      ],
-      cwd
-    );
-  }
-}
-
-/*
- * Junta 3 vídeos já normalizados.
- *
- * Como todos foram padronizados antes,
- * podemos usar -c copy aqui.
- */
-async function concat3(
-  a,
-  b,
-  c,
-  output,
-  cwd
-) {
-  const list = path.join(
-    cwd,
-    `concat-${crypto.randomUUID()}.txt`
+    "-y",
+    output
   );
 
-  const esc = p =>
-    p
-      .replace(/\\/g, "/")
-      .replace(/'/g, "'\\''");
-
-  await fsp.writeFile(
-    list,
-    [
-      `file '${esc(a)}'`,
-      `file '${esc(b)}'`,
-      `file '${esc(c)}'`
-    ].join("\n") + "\n"
+  await runFFmpeg(
+    args,
+    cwd
   );
-
-  try {
-    await runFFmpeg(
-      [
-        "-f",
-        "concat",
-
-        "-safe",
-        "0",
-
-        "-i",
-        list,
-
-        "-map",
-        "0:v:0",
-        "-map",
-        "0:a:0",
-
-        "-c",
-        "copy",
-
-        "-avoid_negative_ts",
-        "make_zero",
-
-        "-movflags",
-        "+faststart",
-
-        "-y",
-        output
-      ],
-      cwd
-    );
-  } finally {
-    await fsp.rm(
-      list,
-      {
-        force: true
-      }
-    );
-  }
 }
 
 async function runPool(
@@ -320,7 +321,8 @@ async function runPool(
 
   async function runner() {
     while (true) {
-      const index = nextIndex++;
+      const index =
+        nextIndex++;
 
       if (
         index >= items.length
@@ -364,77 +366,6 @@ async function runPool(
   await Promise.all(
     workers
   );
-}
-
-async function normalizeAll(
-  cats,
-  dir,
-  job
-) {
-  const normalized = {
-    hooks: [],
-    bodies: [],
-    ctas: []
-  };
-
-  for (
-    const [key, arr]
-    of Object.entries(cats)
-  ) {
-    const label =
-      key === "hooks"
-        ? "ganchos"
-        : key === "bodies"
-        ? "corpos"
-        : "CTAs";
-
-    const items = arr.map(
-      (file, index) => ({
-        file,
-        index
-      })
-    );
-
-    await runPool(
-      items,
-
-      async ({
-        file,
-        index
-      }) => {
-        const out =
-          path.join(
-            dir,
-            `norm-${key}-${index}.mp4`
-          );
-
-        job.current =
-          `Otimizando ${label} ${index + 1}/${arr.length}`;
-
-        await normalize(
-          file.path,
-          out,
-          dir
-        );
-
-        normalized[key][index] = {
-          path: out,
-          name: safeName(
-            file.originalname
-          )
-        };
-      },
-
-      FFMPEG_CONCURRENCY,
-
-      (done, amount) => {
-        job.current =
-          `Otimizando ${label}: ${done}/${amount}`;
-      }
-    );
-  }
-
-  return normalized;
 }
 
 const upload = multer({
@@ -527,7 +458,7 @@ app.post(
       current: "Iniciando…",
       files: [],
       error: null,
-      mode: "normalizado"
+      mode: "montagem-direta"
     };
 
     jobs.set(
@@ -542,49 +473,24 @@ app.post(
 
     (async () => {
       try {
-        const cats = {
-          hooks,
-          bodies,
-          ctas
-        };
-
-        /*
-         * PRIMEIRO:
-         * todos os vídeos são normalizados.
-         */
-        job.current =
-          "Preparando vídeos…";
-
-        const normalized =
-          await normalizeAll(
-            cats,
-            dir,
-            job
-          );
-
-        /*
-         * Depois que todos os vídeos
-         * estiverem padronizados,
-         * criamos as combinações.
-         */
         const combinations = [];
 
         for (
-          const h
-          of normalized.hooks
+          const hook
+          of hooks
         ) {
           for (
-            const b
-            of normalized.bodies
+            const body
+            of bodies
           ) {
             for (
-              const c
-              of normalized.ctas
+              const cta
+              of ctas
             ) {
               combinations.push({
-                h,
-                b,
-                c
+                hook,
+                body,
+                cta
               });
             }
           }
@@ -597,14 +503,14 @@ app.post(
           combinations,
 
           async ({
-            h,
-            b,
-            c
+            hook,
+            body,
+            cta
           }, index) => {
             const n =
               index + 1;
 
-            const out =
+            const output =
               path.join(
                 dir,
                 `video-${String(n).padStart(3, "0")}.mp4`
@@ -614,27 +520,33 @@ app.post(
               `Gerando vídeos: ${n}/${total}`;
 
             await concat3(
-              h.path,
-              b.path,
-              c.path,
-              out,
+              hook.path,
+              body.path,
+              cta.path,
+              output,
               dir
             );
 
             job.files.push({
               name:
                 path.basename(
-                  out
+                  output
                 ),
 
               hook:
-                h.name,
+                safeName(
+                  hook.originalname
+                ),
 
               body:
-                b.name,
+                safeName(
+                  body.originalname
+                ),
 
               cta:
-                c.name,
+                safeName(
+                  cta.originalname
+                ),
 
               index: n
             });
@@ -652,20 +564,24 @@ app.post(
         );
 
         /*
-         * Remove os arquivos enviados
-         * originalmente pelo usuário.
+         * Remove os uploads originais
+         * depois que todos os vídeos
+         * foram gerados.
          */
         await Promise.all(
-          [...hooks, ...bodies, ...ctas]
-            .map(
-              file =>
-                fsp.rm(
-                  file.path,
-                  {
-                    force: true
-                  }
-                )
-            )
+          [
+            ...hooks,
+            ...bodies,
+            ...ctas
+          ].map(
+            file =>
+              fsp.rm(
+                file.path,
+                {
+                  force: true
+                }
+              )
+          )
         );
 
         job.current =
@@ -759,16 +675,19 @@ app.post(
           "Falhou";
 
         await Promise.all(
-          [...hooks, ...bodies, ...ctas]
-            .map(
-              file =>
-                fsp.rm(
-                  file.path,
-                  {
-                    force: true
-                  }
-                )
-            )
+          [
+            ...hooks,
+            ...bodies,
+            ...ctas
+          ].map(
+            file =>
+              fsp.rm(
+                file.path,
+                {
+                  force: true
+                }
+              )
+          )
         );
       }
     })();
