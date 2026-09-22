@@ -95,9 +95,6 @@ async function requireAuth(req, res, next) {
           .trim();
     }
 
-    /*
-     * Vídeos e ZIP usam token pela URL.
-     */
     if (!token) {
       token =
         String(
@@ -116,9 +113,6 @@ async function requireAuth(req, res, next) {
       });
     }
 
-    /*
-     * Publishable Key não é token de usuário.
-     */
     if (token.startsWith("sb_")) {
       console.error(
         "GeraMix: Publishable Key recebida no lugar do token do usuário."
@@ -177,10 +171,7 @@ async function requireAuth(req, res, next) {
     const user =
       await response.json();
 
-    if (
-      !user ||
-      !user.id
-    ) {
+    if (!user || !user.id) {
       console.error(
         "GeraMix: Supabase respondeu sem usuário."
       );
@@ -226,10 +217,6 @@ app.get("/health", (_, res) => {
    CONFIGURAÇÕES
    ========================================================= */
 
-/*
- * Apenas 1 FFmpeg por vez.
- * Isso reduz o consumo de RAM do Render Free.
- */
 const FFMPEG_CONCURRENCY = 1;
 
 const MAX_COMBINATIONS = 1000;
@@ -252,8 +239,8 @@ function runFFmpeg(args, cwd) {
             "error",
 
             /*
-             * Limita threads para reduzir
-             * consumo de memória.
+             * Mantemos 1 thread para evitar
+             * novo estouro de memória no Render.
              */
             "-threads",
             "1",
@@ -272,10 +259,6 @@ function runFFmpeg(args, cwd) {
         data => {
           err += data.toString();
 
-          /*
-           * Não deixa o texto de erro
-           * crescer indefinidamente.
-           */
           if (err.length > 10000) {
             err = err.slice(-10000);
           }
@@ -341,7 +324,7 @@ async function hasAudio(input, cwd) {
 
 
 /* =========================================================
-   NORMALIZA UM VÍDEO
+   NORMALIZA UM VÍDEO UMA ÚNICA VEZ
    ========================================================= */
 
 async function normalizeVideo(
@@ -362,23 +345,22 @@ async function normalizeVideo(
   ];
 
   /*
-   * Se o vídeo não tiver áudio,
-   * adicionamos uma faixa de silêncio.
+   * Se não houver áudio, cria uma faixa
+   * de silêncio.
    */
   if (!audio) {
-
     args.push(
       "-f",
       "lavfi",
       "-i",
       "anullsrc=r=48000:cl=stereo"
     );
-
   }
 
   args.push(
     "-map",
     "0:v:0",
+
     "-map",
     audio
       ? "0:a:0"
@@ -394,9 +376,17 @@ async function normalizeVideo(
     "-c:v",
     "libx264",
 
+    /*
+     * Ultrafast reduz bastante o tempo
+     * de codificação.
+     */
     "-preset",
     "ultrafast",
 
+    /*
+     * CRF 28 mantém arquivos menores
+     * e reduz processamento.
+     */
     "-crf",
     "28",
 
@@ -418,10 +408,6 @@ async function normalizeVideo(
     "-b:a",
     "96k",
 
-    /*
-     * Faz o vídeo terminar junto
-     * com a fonte mais curta.
-     */
     "-shortest",
 
     "-movflags",
@@ -439,13 +425,11 @@ async function normalizeVideo(
 
 
 /* =========================================================
-   JUNTA 3 VÍDEOS JÁ NORMALIZADOS
+   JUNTA VÍDEOS NORMALIZADOS
    ========================================================= */
 
 async function concatNormalized(
-  hook,
-  body,
-  cta,
+  files,
   output,
   cwd
 ) {
@@ -457,11 +441,7 @@ async function concatNormalized(
     );
 
   const content =
-    [
-      hook,
-      body,
-      cta
-    ]
+    files
       .map(
         file =>
           `file '${path.basename(file).replace(/'/g, "'\\''")}'`
@@ -487,6 +467,10 @@ async function concatNormalized(
         "-i",
         listFile,
 
+        /*
+         * Os vídeos já estão normalizados.
+         * Aqui não há nova codificação.
+         */
         "-c",
         "copy",
 
@@ -569,118 +553,6 @@ function calculateOriginality(
 
 
 /* =========================================================
-   CONCATENA 3 VÍDEOS
-   ========================================================= */
-
-async function concat3(
-  hook,
-  body,
-  cta,
-  output,
-  cwd
-) {
-
-  /*
-   * Arquivos temporários.
-   *
-   * Apenas um vídeo é normalizado por vez.
-   */
-  const normalizedHook =
-    path.join(
-      cwd,
-      `tmp-hook-${crypto.randomUUID()}.mp4`
-    );
-
-  const normalizedBody =
-    path.join(
-      cwd,
-      `tmp-body-${crypto.randomUUID()}.mp4`
-    );
-
-  const normalizedCta =
-    path.join(
-      cwd,
-      `tmp-cta-${crypto.randomUUID()}.mp4`
-    );
-
-  try {
-
-    /*
-     * 1. Normaliza o gancho.
-     */
-    await normalizeVideo(
-      hook,
-      normalizedHook,
-      cwd
-    );
-
-    /*
-     * 2. Normaliza o corpo.
-     */
-    await normalizeVideo(
-      body,
-      normalizedBody,
-      cwd
-    );
-
-    /*
-     * 3. Normaliza o CTA.
-     */
-    await normalizeVideo(
-      cta,
-      normalizedCta,
-      cwd
-    );
-
-    /*
-     * 4. Só agora junta os três.
-     *
-     * Como os três já estão padronizados,
-     * o concat usa cópia direta e quase
-     * não exige processamento.
-     */
-    await concatNormalized(
-      normalizedHook,
-      normalizedBody,
-      normalizedCta,
-      output,
-      cwd
-    );
-
-  } finally {
-
-    /*
-     * Apaga os arquivos temporários
-     * mesmo se ocorrer algum erro.
-     */
-    await Promise.all([
-      fsp.rm(
-        normalizedHook,
-        {
-          force: true
-        }
-      ),
-
-      fsp.rm(
-        normalizedBody,
-        {
-          force: true
-        }
-      ),
-
-      fsp.rm(
-        normalizedCta,
-        {
-          force: true
-        }
-      )
-    ]);
-
-  }
-}
-
-
-/* =========================================================
    POOL
    ========================================================= */
 
@@ -721,9 +593,7 @@ async function runPool(
           items.length
         );
       }
-
     }
-
   }
 
   const amount =
@@ -743,7 +613,6 @@ async function runPool(
     workers.push(
       runner()
     );
-
   }
 
   await Promise.all(
@@ -823,7 +692,6 @@ app.post(
         error:
           "Envie pelo menos 1 vídeo em cada categoria."
       });
-
     }
 
     const total =
@@ -840,7 +708,6 @@ app.post(
         error:
           `Limite de ${MAX_COMBINATIONS} combinações por lote.`
       });
-
     }
 
     const id =
@@ -895,144 +762,311 @@ app.post(
       total
     });
 
+
+    /* =====================================================
+       PROCESSAMENTO EM SEGUNDO PLANO
+       ===================================================== */
+
     (async () => {
+
+      /*
+       * Guarda os arquivos normalizados.
+       */
+      const normalizedHooks = [];
+      const normalizedBodies = [];
+      const normalizedCtas = [];
 
       try {
 
-        const combinations = [];
+        /* =================================================
+           1. NORMALIZA GANCHOS UMA ÚNICA VEZ
+           ================================================= */
+
+        job.current =
+          "Preparando ganchos…";
 
         for (
-          const hook
-          of hooks
+          let i = 0;
+          i < hooks.length;
+          i++
         ) {
 
-          for (
-            const body
-            of bodies
-          ) {
+          const file =
+            hooks[i];
 
-            for (
-              const cta
-              of ctas
-            ) {
+          const output =
+            path.join(
+              dir,
+              `hook-${String(i + 1).padStart(3, "0")}.mp4`
+            );
 
-              combinations.push({
-                hook,
-                body,
-                cta
-              });
+          await normalizeVideo(
+            file.path,
+            output,
+            dir
+          );
 
+          normalizedHooks.push({
+            source:
+              file,
+
+            path:
+              output
+          });
+
+          /*
+           * O upload original já não é mais
+           * necessário depois da normalização.
+           */
+          await fsp.rm(
+            file.path,
+            {
+              force: true
             }
-
-          }
-
+          );
         }
+
+
+        /* =================================================
+           2. NORMALIZA CORPOS UMA ÚNICA VEZ
+           ================================================= */
+
+        job.current =
+          "Preparando corpos…";
+
+        for (
+          let i = 0;
+          i < bodies.length;
+          i++
+        ) {
+
+          const file =
+            bodies[i];
+
+          const output =
+            path.join(
+              dir,
+              `body-${String(i + 1).padStart(3, "0")}.mp4`
+            );
+
+          await normalizeVideo(
+            file.path,
+            output,
+            dir
+          );
+
+          normalizedBodies.push({
+            source:
+              file,
+
+            path:
+              output
+          });
+
+          await fsp.rm(
+            file.path,
+            {
+              force: true
+            }
+          );
+        }
+
+
+        /* =================================================
+           3. NORMALIZA CTAs UMA ÚNICA VEZ
+           ================================================= */
+
+        job.current =
+          "Preparando CTAs…";
+
+        for (
+          let i = 0;
+          i < ctas.length;
+          i++
+        ) {
+
+          const file =
+            ctas[i];
+
+          const output =
+            path.join(
+              dir,
+              `cta-${String(i + 1).padStart(3, "0")}.mp4`
+            );
+
+          await normalizeVideo(
+            file.path,
+            output,
+            dir
+          );
+
+          normalizedCtas.push({
+            source:
+              file,
+
+            path:
+              output
+          });
+
+          await fsp.rm(
+            file.path,
+            {
+              force: true
+            }
+          );
+        }
+
+
+        /* =================================================
+           4. MONTA COMBINAÇÕES
+           ================================================= */
 
         job.current =
           "Montando vídeos…";
 
-        await runPool(
+        let index = 0;
 
-          combinations,
+        for (
+          const hook
+          of normalizedHooks
+        ) {
 
-          async (
-            {
-              hook,
-              body,
-              cta
-            },
+          for (
+            const body
+            of normalizedBodies
+          ) {
 
-            index
-          ) => {
+            for (
+              const cta
+              of normalizedCtas
+            ) {
 
-            const n =
-              index + 1;
+              index++;
 
-            const output =
-              path.join(
-                dir,
-                `video-${String(n).padStart(3, "0")}.mp4`
+              const output =
+                path.join(
+                  dir,
+                  `video-${String(index).padStart(3, "0")}.mp4`
+                );
+
+              job.current =
+                `Gerando vídeos: ${index}/${total}`;
+
+              /*
+               * Agora é apenas concatenação
+               * dos arquivos já normalizados.
+               */
+              await concatNormalized(
+                [
+                  hook.path,
+                  body.path,
+                  cta.path
+                ],
+                output,
+                dir
               );
 
-            job.current =
-              `Gerando vídeos: ${n}/${total}`;
+              /*
+               * Mantém a lógica de originalidade.
+               */
+              const currentCombination = {
+                hook: {
+                  path:
+                    hook.source.path
+                },
 
-            await concat3(
-              hook.path,
-              body.path,
-              cta.path,
-              output,
-              dir
-            );
+                body: {
+                  path:
+                    body.source.path
+                },
 
-            const originality =
-              calculateOriginality(
-                combinations[index],
-                combinations[index - 1]
-              );
-
-            job.files.push({
-
-              name:
-                path.basename(
-                  output
-                ),
-
-              hook:
-                safeName(
-                  hook.originalname
-                ),
-
-              body:
-                safeName(
-                  body.originalname
-                ),
-
-              cta:
-                safeName(
-                  cta.originalname
-                ),
-
-              index:
-                n,
-
-              originality
-            });
-
-            job.done =
-              job.files.length;
-
-          },
-
-          FFMPEG_CONCURRENCY
-        );
-
-
-        /* =================================================
-           APAGA UPLOADS ORIGINAIS
-           ================================================= */
-
-        await Promise.all(
-
-          [
-            ...hooks,
-            ...bodies,
-            ...ctas
-          ].map(
-            file =>
-              fsp.rm(
-                file.path,
-                {
-                  force: true
+                cta: {
+                  path:
+                    cta.source.path
                 }
-              )
-          )
+              };
 
-        );
+              const previousCombination =
+                index > 1
+                  ? {
+                      hook: {
+                        path:
+                          normalizedHooks[
+                            Math.floor(
+                              (index - 2) /
+                              (
+                                normalizedBodies.length *
+                                normalizedCtas.length
+                              )
+                            )
+                          ]?.source.path
+                      },
+
+                      body: {
+                        path:
+                          normalizedBodies[
+                            Math.floor(
+                              (
+                                (index - 2) /
+                                normalizedCtas.length
+                              ) %
+                              normalizedBodies.length
+                            )
+                          ]?.source.path
+                      },
+
+                      cta: {
+                        path:
+                          normalizedCtas[
+                            (index - 2) %
+                            normalizedCtas.length
+                          ]?.source.path
+                      }
+                    }
+                  : null;
+
+              const originality =
+                calculateOriginality(
+                  currentCombination,
+                  previousCombination
+                );
+
+              job.files.push({
+
+                name:
+                  path.basename(
+                    output
+                  ),
+
+                hook:
+                  safeName(
+                    hook.source.originalname
+                  ),
+
+                body:
+                  safeName(
+                    body.source.originalname
+                  ),
+
+                cta:
+                  safeName(
+                    cta.source.originalname
+                  ),
+
+                index,
+
+                originality
+              });
+
+              job.done =
+                index;
+            }
+          }
+        }
 
 
         /* =================================================
-           ORDENA ARQUIVOS
+           5. ORDENA RESULTADOS
            ================================================= */
 
         job.files.sort(
@@ -1042,7 +1076,7 @@ app.post(
 
 
         /* =================================================
-           CRIA ZIP
+           6. CRIA ZIP
            ================================================= */
 
         job.current =
@@ -1066,10 +1100,6 @@ app.post(
               archiver(
                 "zip",
                 {
-                  /*
-                   * Nível 0 porque MP4 já é
-                   * altamente comprimido.
-                   */
                   zlib: {
                     level: 0
                   }
@@ -1110,17 +1140,15 @@ app.post(
                     file.name
                 }
               );
-
             }
 
             archive.finalize();
-
           }
         );
 
 
         /* =================================================
-           FINALIZADO
+           7. FINALIZADO
            ================================================= */
 
         job.status =
@@ -1149,8 +1177,11 @@ app.post(
         job.current =
           "Falhou";
 
-        await Promise.all(
 
+        /*
+         * Remove uploads que ainda existirem.
+         */
+        await Promise.all(
           [
             ...hooks,
             ...bodies,
@@ -1164,7 +1195,6 @@ app.post(
                 }
               )
           )
-
         );
 
       }
@@ -1197,7 +1227,6 @@ app.get(
         error:
           "Processamento não encontrado."
       });
-
     }
 
     if (
@@ -1209,11 +1238,9 @@ app.get(
         error:
           "Processamento não encontrado."
       });
-
     }
 
     res.json(job);
-
   }
 );
 
@@ -1241,7 +1268,6 @@ app.get(
         .send(
           "Processamento não encontrado."
         );
-
     }
 
     if (
@@ -1254,7 +1280,6 @@ app.get(
         .send(
           "Processamento não encontrado."
         );
-
     }
 
     if (!job.zip) {
@@ -1264,7 +1289,6 @@ app.get(
         .send(
           "ZIP ainda não está pronto."
         );
-
     }
 
     res.download(
@@ -1275,7 +1299,6 @@ app.get(
       ),
       "geramix-videos.zip"
     );
-
   }
 );
 
@@ -1329,7 +1352,6 @@ app.get(
       ),
       name
     );
-
   }
 );
 
@@ -1361,7 +1383,6 @@ app.use(
           "Erro no envio dos vídeos: " +
           error.message
       });
-
     }
 
     if (error) {
@@ -1376,11 +1397,9 @@ app.use(
           error.message ||
           "Erro interno do servidor."
       });
-
     }
 
     next();
-
   }
 );
 
@@ -1400,6 +1419,5 @@ app.listen(
     console.log(
       `FFmpeg simultâneos: ${FFMPEG_CONCURRENCY}`
     );
-
   }
 );
