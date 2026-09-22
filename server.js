@@ -239,13 +239,8 @@ function runFFmpeg(args, cwd) {
             "-loglevel",
             "error",
 
-            /*
-             * ALTERAÇÃO DE VELOCIDADE:
-             * continua sendo apenas 1 FFmpeg por vez,
-             * mas agora ele pode usar 2 threads.
-             */
             "-threads",
-            "2",
+            "1",
 
             ...args
           ],
@@ -470,25 +465,8 @@ async function concatNormalized(
         "-i",
         listFile,
 
-        /*
-         * Os vídeos já estão normalizados.
-         *
-         * Portanto fazemos somente
-         * a cópia dos streams.
-         */
         "-c",
         "copy",
-
-        /*
-         * ALTERAÇÃO ANTERIOR:
-         *
-         * Removido:
-         * -movflags +faststart
-         *
-         * Isso evita a etapa extra de
-         * movimentação do índice do MP4
-         * em cada vídeo gerado.
-         */
 
         "-y",
         output
@@ -1045,10 +1023,6 @@ app.post(
               archiver(
                 "zip",
                 {
-                  /*
-                   * MP4 já é comprimido.
-                   * Não recomprimir.
-                   */
                   zlib: {
                     level: 0
                   }
