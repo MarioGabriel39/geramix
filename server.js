@@ -12,19 +12,47 @@ import { createClient } from "@supabase/supabase-js";
 
 const app = express();
 
-const PORT = process.env.PORT || 3000;
-const ROOT = process.cwd();
-const PUBLIC = path.join(ROOT, "public");
+const PORT =
+  process.env.PORT || 3000;
 
-const BASE = path.join(os.tmpdir(), "geramix");
-const UPLOADS = path.join(BASE, "uploads");
-const JOBS = path.join(BASE, "jobs");
+const ROOT =
+  process.cwd();
+
+const PUBLIC =
+  path.join(
+    ROOT,
+    "public"
+  );
+
+const BASE =
+  path.join(
+    os.tmpdir(),
+    "geramix"
+  );
+
+const UPLOADS =
+  path.join(
+    BASE,
+    "uploads"
+  );
+
+const JOBS =
+  path.join(
+    BASE,
+    "jobs"
+  );
+
+
+/* =========================================================
+   SUPABASE
+   ========================================================= */
 
 const SUPABASE_URL =
   process.env.SUPABASE_URL;
 
 const SUPABASE_ANON_KEY =
   process.env.SUPABASE_ANON_KEY;
+
 
 if (
   !SUPABASE_URL ||
@@ -35,29 +63,74 @@ if (
   );
 }
 
-const supabase = createClient(
-  SUPABASE_URL,
-  SUPABASE_ANON_KEY
-);
+
+/*
+ * Cliente Supabase exclusivo do servidor.
+ *
+ * O servidor NÃO deve manter uma sessão própria.
+ * Ele apenas recebe e valida o access token
+ * enviado pelo navegador.
+ */
+
+const supabase =
+  createClient(
+    SUPABASE_URL,
+    SUPABASE_ANON_KEY,
+    {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false,
+        detectSessionInUrl: false
+      }
+    }
+  );
+
+
+/* =========================================================
+   DIRETÓRIOS
+   ========================================================= */
 
 await Promise.all([
   fsp.mkdir(
     UPLOADS,
-    { recursive: true }
+    {
+      recursive: true
+    }
   ),
 
   fsp.mkdir(
     JOBS,
-    { recursive: true }
+    {
+      recursive: true
+    }
   )
 ]);
 
+
+/* =========================================================
+   ARQUIVOS PÚBLICOS
+   ========================================================= */
+
 app.use(
-  express.static(PUBLIC)
+  express.static(
+    PUBLIC
+  )
 );
+
+
+/* =========================================================
+   CONFIGURAÇÃO DO FRONT-END
+   ========================================================= */
+
 app.get(
   "/api/config",
   (_, res) => {
+
+    res.setHeader(
+      "Cache-Control",
+      "no-store"
+    );
+
     res.json({
       supabaseUrl:
         SUPABASE_URL,
@@ -65,6 +138,7 @@ app.get(
       supabaseAnonKey:
         SUPABASE_ANON_KEY
     });
+
   }
 );
 
@@ -78,39 +152,113 @@ async function requireAuth(
   res,
   next
 ) {
+
   try {
+
     let token = "";
 
+
+    /*
+     * Primeiro tenta o cabeçalho:
+     *
+     * Authorization: Bearer TOKEN
+     */
+
     const authorization =
-      req.headers.authorization || "";
+      String(
+        req.headers.authorization ||
+        ""
+      ).trim();
+
 
     if (
-      authorization.startsWith(
-        "Bearer "
+      authorization
+        .toLowerCase()
+        .startsWith(
+          "bearer "
+        )
+    ) {
+
+      token =
+        authorization
+          .substring(7)
+          .trim();
+
+    }
+
+
+    /*
+     * Para vídeos e ZIP,
+     * também aceitamos token pela URL.
+     *
+     * Isso mantém compatibilidade
+     * com o index.html atual.
+     */
+
+    if (
+      !token
+    ) {
+
+      token =
+        String(
+          req.query.token ||
+          ""
+        ).trim();
+
+    }
+
+
+    if (
+      !token
+    ) {
+
+      return res
+        .status(401)
+        .json({
+          error:
+            "Não autenticado."
+        });
+
+    }
+
+
+    /*
+     * A Publishable Key NÃO é um access token.
+     *
+     * Um access token de usuário é um JWT.
+     * Portanto, se por algum motivo o front
+     * mandar a chave sb_ no lugar do token,
+     * rejeitamos imediatamente.
+     */
+
+    if (
+      token.startsWith(
+        "sb_"
       )
     ) {
-      token =
-        authorization.substring(7);
+
+      console.error(
+        "GeraMix: o navegador enviou uma chave Supabase em vez do access token do usuário."
+      );
+
+
+      return res
+        .status(401)
+        .json({
+          error:
+            "Sessão inválida ou expirada."
+        });
+
     }
 
-    if (!token) {
-      token =
-        req.query.token || "";
-    }
 
-    if (!token) {
-      return res.status(401).json({
-        error:
-          "Não autenticado."
-      });
-    }
-
-    if (!token) {
-      return res.status(401).json({
-        error:
-          "Token de acesso ausente."
-      });
-    }
+    /*
+     * Validação real no Supabase.
+     *
+     * O getUser(jwt) faz uma consulta ao
+     * servidor de autenticação e retorna
+     * um usuário autenticado.
+     */
 
     const {
       data,
@@ -120,32 +268,56 @@ async function requireAuth(
         token
       );
 
+
     if (
       error ||
       !data?.user
     ) {
-      return res.status(401).json({
-        error:
-          "Sessão inválida ou expirada."
-      });
+
+      console.error(
+        "GeraMix: token rejeitado pelo Supabase:",
+        error?.message ||
+        "usuário não encontrado"
+      );
+
+
+      return res
+        .status(401)
+        .json({
+          error:
+            "Sessão inválida ou expirada."
+        });
+
     }
+
+
+    /*
+     * Usuário autenticado.
+     */
 
     req.user =
       data.user;
 
+
     next();
 
   } catch (error) {
+
     console.error(
-      "Erro na autenticação:",
+      "Erro na autenticação do GeraMix:",
       error
     );
 
-    return res.status(401).json({
-      error:
-        "Não foi possível validar sua sessão."
-    });
+
+    return res
+      .status(401)
+      .json({
+        error:
+          "Não foi possível validar sua sessão."
+      });
+
   }
+
 }
 
 
@@ -156,12 +328,19 @@ async function requireAuth(
 app.get(
   "/health",
   (_, res) => {
+
     res.json({
       ok: true,
-      service: "geramix",
+
+      service:
+        "geramix",
+
       ffmpeg:
-        Boolean(ffmpegPath)
+        Boolean(
+          ffmpegPath
+        )
     });
+
   }
 );
 
@@ -182,6 +361,7 @@ const FFMPEG_CONCURRENCY =
     )
   );
 
+
 const MAX_COMBINATIONS =
   1000;
 
@@ -194,6 +374,7 @@ function runFFmpeg(
   args,
   cwd
 ) {
+
   return new Promise(
     (
       resolve,
@@ -214,20 +395,26 @@ function runFFmpeg(
           }
         );
 
+
       let err = "";
+
 
       p.stderr.on(
         "data",
         d => {
+
           err +=
             d.toString();
+
         }
       );
+
 
       p.on(
         "error",
         reject
       );
+
 
       p.on(
         "close",
@@ -236,14 +423,18 @@ function runFFmpeg(
           if (
             code === 0
           ) {
+
             resolve();
+
           } else {
+
             reject(
               new Error(
                 err.trim() ||
                 `FFmpeg saiu com código ${code}`
               )
             );
+
           }
 
         }
@@ -251,6 +442,7 @@ function runFFmpeg(
 
     }
   );
+
 }
 
 
@@ -262,28 +454,37 @@ async function hasAudio(
   input,
   cwd
 ) {
+
   try {
 
     await runFFmpeg(
       [
         "-i",
         input,
+
         "-map",
         "0:a:0",
+
         "-c",
         "copy",
+
         "-f",
         "null",
+
         "-"
       ],
       cwd
     );
 
+
     return true;
 
   } catch {
+
     return false;
+
   }
+
 }
 
 
@@ -294,14 +495,19 @@ async function hasAudio(
 function safeName(
   name
 ) {
+
   return String(
-    name || "video"
+    name ||
+    "video"
   )
     .replace(
       /[^a-zA-Z0-9._-]/g,
       "_"
     )
-    .slice(-100);
+    .slice(
+      -100
+    );
+
 }
 
 
@@ -314,36 +520,54 @@ function calculateOriginality(
   previous
 ) {
 
-  if (!previous) {
+  if (
+    !previous
+  ) {
+
     return 100;
+
   }
 
-  let different = 0;
+
+  let different =
+    0;
+
 
   if (
     current.hook.path !==
     previous.hook.path
   ) {
+
     different++;
+
   }
+
 
   if (
     current.body.path !==
     previous.body.path
   ) {
+
     different++;
+
   }
+
 
   if (
     current.cta.path !==
     previous.cta.path
   ) {
+
     different++;
+
   }
 
-  return 70 + (
+
+  return (
+    70 +
     different * 10
   );
+
 }
 
 
@@ -365,7 +589,10 @@ async function concat3(
     cta
   ];
 
-  const audioFlags = [];
+
+  const audioFlags =
+    [];
+
 
   for (
     const input
@@ -381,10 +608,14 @@ async function concat3(
 
   }
 
-  const args = [];
+
+  const args =
+    [];
 
 
-  /* Entradas */
+  /*
+   * Entradas
+   */
 
   for (
     const input
@@ -399,9 +630,13 @@ async function concat3(
   }
 
 
-  /* Áudios silenciosos */
+  /*
+   * Áudios silenciosos
+   */
 
-  const silentIndexes = [];
+  const silentIndexes =
+    [];
+
 
   for (
     let i = 0;
@@ -417,15 +652,19 @@ async function concat3(
         inputs.length +
         silentIndexes.length;
 
+
       silentIndexes.push(
         silentIndex
       );
 
+
       args.push(
         "-f",
         "lavfi",
+
         "-t",
         "86400",
+
         "-i",
         "anullsrc=r=48000:cl=stereo"
       );
@@ -435,10 +674,13 @@ async function concat3(
   }
 
 
-  const filterParts = [];
+  const filterParts =
+    [];
 
 
-  /* Vídeos */
+  /*
+   * Vídeos
+   */
 
   for (
     let i = 0;
@@ -460,9 +702,13 @@ async function concat3(
   }
 
 
-  /* Áudios */
+  /*
+   * Áudios
+   */
 
-  let silentCounter = 0;
+  let silentCounter =
+    0;
+
 
   for (
     let i = 0;
@@ -488,11 +734,13 @@ async function concat3(
         inputs.length +
         silentCounter;
 
+
       filterParts.push(
         `[${silentIndex}:a:0]` +
         `asetpts=PTS-STARTPTS` +
         `[a${i}]`
       );
+
 
       silentCounter++;
 
@@ -501,9 +749,13 @@ async function concat3(
   }
 
 
-  /* Concat */
+  /*
+   * Concat
+   */
 
-  let concatInputs = "";
+  let concatInputs =
+    "";
+
 
   for (
     let i = 0;
@@ -516,6 +768,7 @@ async function concat3(
 
   }
 
+
   filterParts.push(
     `${concatInputs}` +
     `concat=n=3:v=1:a=1:` +
@@ -524,7 +777,9 @@ async function concat3(
 
 
   const filterComplex =
-    filterParts.join(";");
+    filterParts.join(
+      ";"
+    );
 
 
   args.push(
@@ -578,6 +833,7 @@ async function concat3(
     args,
     cwd
   );
+
 }
 
 
@@ -592,8 +848,13 @@ async function runPool(
   onProgress
 ) {
 
-  let nextIndex = 0;
-  let completed = 0;
+  let nextIndex =
+    0;
+
+
+  let completed =
+    0;
+
 
   async function runner() {
 
@@ -602,19 +863,25 @@ async function runPool(
       const index =
         nextIndex++;
 
+
       if (
         index >=
         items.length
       ) {
+
         return;
+
       }
+
 
       await worker(
         items[index],
         index
       );
 
+
       completed++;
+
 
       if (
         onProgress
@@ -638,7 +905,9 @@ async function runPool(
       items.length
     );
 
-  const workers = [];
+
+  const workers =
+    [];
 
 
   for (
@@ -657,6 +926,7 @@ async function runPool(
   await Promise.all(
     workers
   );
+
 }
 
 
@@ -666,16 +936,22 @@ async function runPool(
 
 const upload =
   multer({
-    dest: UPLOADS,
+
+    dest:
+      UPLOADS,
 
     limits: {
-      files: 30,
+
+      files:
+        30,
 
       fileSize:
         200 *
         1024 *
         1024
+
     }
+
   });
 
 
@@ -692,25 +968,37 @@ const jobs =
    ========================================================= */
 
 app.post(
+
   "/api/jobs",
 
   requireAuth,
 
   upload.fields([
+
     {
-      name: "hooks",
-      maxCount: 10
+      name:
+        "hooks",
+
+      maxCount:
+        10
     },
 
     {
-      name: "bodies",
-      maxCount: 10
+      name:
+        "bodies",
+
+      maxCount:
+        10
     },
 
     {
-      name: "ctas",
-      maxCount: 10
+      name:
+        "ctas",
+
+      maxCount:
+        10
     }
+
   ]),
 
   async (
@@ -722,9 +1010,11 @@ app.post(
       req.files?.hooks ||
       [];
 
+
     const bodies =
       req.files?.bodies ||
       [];
+
 
     const ctas =
       req.files?.ctas ||
@@ -740,8 +1030,10 @@ app.post(
       return res
         .status(400)
         .json({
+
           error:
             "Envie pelo menos 1 vídeo em cada categoria."
+
         });
 
     }
@@ -761,8 +1053,10 @@ app.post(
       return res
         .status(400)
         .json({
+
           error:
             `Limite de ${MAX_COMBINATIONS} combinações por lote.`
+
         });
 
     }
@@ -782,16 +1076,11 @@ app.post(
     await fsp.mkdir(
       dir,
       {
-        recursive: true
+        recursive:
+          true
       }
     );
 
-
-    /*
-     * IMPORTANTE:
-     * Este processamento pertence
-     * ao usuário autenticado.
-     */
 
     const job = {
 
@@ -805,12 +1094,14 @@ app.post(
 
       total,
 
-      done: 0,
+      done:
+        0,
 
       current:
         "Iniciando…",
 
-      files: [],
+      files:
+        [],
 
       error:
         null,
@@ -857,9 +1148,11 @@ app.post(
             ) {
 
               combinations.push({
+
                 hook,
                 body,
                 cta
+
               });
 
             }
@@ -892,8 +1185,11 @@ app.post(
 
             const output =
               path.join(
+
                 dir,
+
                 `video-${String(n).padStart(3, "0")}.mp4`
+
               );
 
 
@@ -969,14 +1265,17 @@ app.post(
 
 
         job.files.sort(
-          (a, b) =>
+          (
+            a,
+            b
+          ) =>
             a.index -
             b.index
         );
 
 
         /*
-         * Apaga os uploads originais.
+         * Apaga uploads originais.
          */
 
         await Promise.all(
@@ -992,7 +1291,8 @@ app.post(
               fsp.rm(
                 file.path,
                 {
-                  force: true
+                  force:
+                    true
                 }
               )
 
@@ -1007,12 +1307,16 @@ app.post(
 
         const zipPath =
           path.join(
+
             dir,
+
             "geramix-videos.zip"
+
           );
 
 
         await new Promise(
+
           (
             resolve,
             reject
@@ -1029,7 +1333,8 @@ app.post(
                 "zip",
                 {
                   zlib: {
-                    level: 0
+                    level:
+                      0
                   }
                 }
               );
@@ -1083,6 +1388,7 @@ app.post(
             archive.finalize();
 
           }
+
         );
 
 
@@ -1132,7 +1438,8 @@ app.post(
               fsp.rm(
                 file.path,
                 {
-                  force: true
+                  force:
+                    true
                 }
               )
 
@@ -1145,6 +1452,7 @@ app.post(
     })();
 
   }
+
 );
 
 
@@ -1153,6 +1461,7 @@ app.post(
    ========================================================= */
 
 app.get(
+
   "/api/jobs/:id",
 
   requireAuth,
@@ -1168,22 +1477,21 @@ app.get(
       );
 
 
-    if (!job) {
+    if (
+      !job
+    ) {
 
       return res
         .status(404)
         .json({
+
           error:
             "Processamento não encontrado."
+
         });
 
     }
 
-
-    /*
-     * Só o dono pode consultar
-     * o processamento.
-     */
 
     if (
       job.userId !==
@@ -1193,16 +1501,21 @@ app.get(
       return res
         .status(404)
         .json({
+
           error:
             "Processamento não encontrado."
+
         });
 
     }
 
 
-    res.json(job);
+    res.json(
+      job
+    );
 
   }
+
 );
 
 
@@ -1211,6 +1524,7 @@ app.get(
    ========================================================= */
 
 app.get(
+
   "/api/jobs/:id/zip",
 
   requireAuth,
@@ -1226,7 +1540,9 @@ app.get(
       );
 
 
-    if (!job) {
+    if (
+      !job
+    ) {
 
       return res
         .status(404)
@@ -1251,7 +1567,9 @@ app.get(
     }
 
 
-    if (!job.zip) {
+    if (
+      !job.zip
+    ) {
 
       return res
         .status(404)
@@ -1265,9 +1583,13 @@ app.get(
     res.download(
 
       path.join(
+
         JOBS,
+
         req.params.id,
+
         "geramix-videos.zip"
+
       ),
 
       "geramix-videos.zip"
@@ -1275,6 +1597,7 @@ app.get(
     );
 
   }
+
 );
 
 
@@ -1283,6 +1606,7 @@ app.get(
    ========================================================= */
 
 app.get(
+
   "/api/jobs/:id/video/:name",
 
   requireAuth,
@@ -1298,7 +1622,9 @@ app.get(
       );
 
 
-    if (!job) {
+    if (
+      !job
+    ) {
 
       return res.sendStatus(
         404
@@ -1328,7 +1654,8 @@ app.get(
     if (
       !job.files.some(
         f =>
-          f.name === name
+          f.name ===
+          name
       )
     ) {
 
@@ -1342,14 +1669,84 @@ app.get(
     res.download(
 
       path.join(
+
         JOBS,
+
         req.params.id,
+
         name
+
       ),
 
       name
 
     );
+
+  }
+
+);
+
+
+/* =========================================================
+   ERROS DO MULTER
+   ========================================================= */
+
+app.use(
+  (
+    error,
+    req,
+    res,
+    next
+  ) => {
+
+    if (
+      error instanceof
+      multer.MulterError
+    ) {
+
+      console.error(
+        "Erro Multer:",
+        error
+      );
+
+
+      return res
+        .status(400)
+        .json({
+
+          error:
+            "Erro no envio dos vídeos: " +
+            error.message
+
+        });
+
+    }
+
+
+    if (
+      error
+    ) {
+
+      console.error(
+        "Erro no servidor:",
+        error
+      );
+
+
+      return res
+        .status(500)
+        .json({
+
+          error:
+            error.message ||
+            "Erro interno do servidor."
+
+        });
+
+    }
+
+
+    next();
 
   }
 );
@@ -1360,16 +1757,20 @@ app.get(
    ========================================================= */
 
 app.listen(
+
   PORT,
+
   () => {
 
     console.log(
       `GeraMix rodando na porta ${PORT}`
     );
 
+
     console.log(
       `FFmpeg simultâneos: ${FFMPEG_CONCURRENCY}`
     );
 
   }
+
 );
