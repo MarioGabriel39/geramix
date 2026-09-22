@@ -346,10 +346,6 @@ async function normalizeVideo(
     input
   ];
 
-  /*
-   * Se não houver áudio,
-   * adiciona silêncio.
-   */
   if (!audio) {
     args.push(
       "-f",
@@ -378,9 +374,6 @@ async function normalizeVideo(
     "-c:v",
     "libx264",
 
-    /*
-     * Prioridade para velocidade.
-     */
     "-preset",
     "ultrafast",
 
@@ -407,10 +400,6 @@ async function normalizeVideo(
 
     "-shortest",
 
-    /*
-     * Arquivo intermediário.
-     * Não usamos faststart aqui.
-     */
     "-y",
     output
   );
@@ -423,7 +412,7 @@ async function normalizeVideo(
 
 
 /* =========================================================
-   JUNTA VÍDEOS NORMALIZADOS
+   JUNTA 3 VÍDEOS NORMALIZADOS
    ========================================================= */
 
 async function concatNormalized(
@@ -568,6 +557,101 @@ const jobs = new Map();
 
 
 /* =========================================================
+   OBTÉM OS VÍDEOS NORMALIZADOS DE UMA COMBINAÇÃO
+   ========================================================= */
+
+function getCombinationFiles(
+  job,
+  file
+) {
+
+  const dir =
+    path.join(
+      JOBS,
+      job.id
+    );
+
+  const hook =
+    path.join(
+      dir,
+      `hook-${String(file.hookIndex).padStart(3, "0")}.mp4`
+    );
+
+  const body =
+    path.join(
+      dir,
+      `body-${String(file.bodyIndex).padStart(3, "0")}.mp4`
+    );
+
+  const cta =
+    path.join(
+      dir,
+      `cta-${String(file.ctaIndex).padStart(3, "0")}.mp4`
+    );
+
+  return [
+    hook,
+    body,
+    cta
+  ];
+}
+
+
+/* =========================================================
+   CRIA UM VÍDEO TEMPORÁRIO SOB DEMANDA
+   ========================================================= */
+
+async function createVideoForJob(
+  job,
+  file
+) {
+
+  const dir =
+    path.join(
+      JOBS,
+      job.id
+    );
+
+  const tempName =
+    `temp-${crypto.randomUUID()}.mp4`;
+
+  const output =
+    path.join(
+      dir,
+      tempName
+    );
+
+  const sources =
+    getCombinationFiles(
+      job,
+      file
+    );
+
+  try {
+
+    await concatNormalized(
+      sources,
+      output,
+      dir
+    );
+
+    return output;
+
+  } catch (error) {
+
+    await fsp.rm(
+      output,
+      {
+        force: true
+      }
+    );
+
+    throw error;
+  }
+}
+
+
+/* =========================================================
    CRIA JOB
    ========================================================= */
 
@@ -671,7 +755,7 @@ app.post(
         null,
 
       mode:
-        "montagem-direta"
+        "montagem-sob-demanda"
     };
 
     jobs.set(
@@ -833,54 +917,55 @@ app.post(
 
 
         /* ================================================
-           4. COMBINAÇÕES
+           4. PREPARA AS COMBINAÇÕES
+           
+           IMPORTANTE:
+           Aqui NÃO criamos os 252 MP4.
+           Apenas registramos as combinações.
            ================================================ */
 
         job.current =
-          "Montando vídeos…";
+          "Preparando combinações…";
 
         let index = 0;
 
         for (
-          const hook
-          of normalizedHooks
+          let hookIndex = 0;
+          hookIndex < normalizedHooks.length;
+          hookIndex++
         ) {
 
           for (
-            const body
-            of normalizedBodies
+            let bodyIndex = 0;
+            bodyIndex < normalizedBodies.length;
+            bodyIndex++
           ) {
 
             for (
-              const cta
-              of normalizedCtas
+              let ctaIndex = 0;
+              ctaIndex < normalizedCtas.length;
+              ctaIndex++
             ) {
 
               index++;
 
-              const output =
-                path.join(
-                  dir,
-                  `video-${String(index).padStart(3, "0")}.mp4`
-                );
+              const hook =
+                normalizedHooks[
+                  hookIndex
+                ];
+
+              const body =
+                normalizedBodies[
+                  bodyIndex
+                ];
+
+              const cta =
+                normalizedCtas[
+                  ctaIndex
+                ];
 
               job.current =
-                `Gerando vídeos: ${index}/${total}`;
-
-              /*
-               * Aqui ocorre somente a junção.
-               *
-               * Não há nova codificação.
-               */
-              await concatNormalized(
-                [
-                  hook.path,
-                  body.path,
-                  cta.path
-                ],
-                output,
-                dir
-              );
+                `Preparando vídeos: ${index}/${total}`;
 
 
               /* ==========================================
@@ -904,14 +989,17 @@ app.post(
                 }
               };
 
+              const previousIndex =
+                index - 2;
+
               const previousCombination =
-                index > 1
+                previousIndex >= 0
                   ? {
                       hook: {
                         path:
                           normalizedHooks[
                             Math.floor(
-                              (index - 2) /
+                              previousIndex /
                               (
                                 normalizedBodies.length *
                                 normalizedCtas.length
@@ -925,7 +1013,7 @@ app.post(
                           normalizedBodies[
                             Math.floor(
                               (
-                                (index - 2) /
+                                previousIndex /
                                 normalizedCtas.length
                               ) %
                               normalizedBodies.length
@@ -936,7 +1024,7 @@ app.post(
                       cta: {
                         path:
                           normalizedCtas[
-                            (index - 2) %
+                            previousIndex %
                             normalizedCtas.length
                           ]?.source.path
                       }
@@ -951,15 +1039,15 @@ app.post(
 
 
               /* ==========================================
-                 SALVA RESULTADO
+                 SALVA SOMENTE OS DADOS
+                 
+                 O MP4 NÃO É SALVO AQUI.
                  ========================================== */
 
               job.files.push({
 
                 name:
-                  path.basename(
-                    output
-                  ),
+                  `video-${String(index).padStart(3, "0")}.mp4`,
 
                 hook:
                   safeName(
@@ -975,6 +1063,15 @@ app.post(
                   safeName(
                     cta.source.originalname
                   ),
+
+                hookIndex:
+                  hookIndex + 1,
+
+                bodyIndex:
+                  bodyIndex + 1,
+
+                ctaIndex:
+                  ctaIndex + 1,
 
                 index,
 
@@ -999,86 +1096,17 @@ app.post(
 
 
         /* ================================================
-           6. ZIP
+           6. FINALIZADO
+           
+           O ZIP será montado quando o usuário clicar
+           em baixar ZIP.
            ================================================ */
-
-        job.current =
-          "Criando ZIP…";
-
-        const zipPath =
-          path.join(
-            dir,
-            "geramix-videos.zip"
-          );
-
-        await new Promise(
-          (resolve, reject) => {
-
-            const output =
-              fs.createWriteStream(
-                zipPath
-              );
-
-            const archive =
-              archiver(
-                "zip",
-                {
-                  zlib: {
-                    level: 0
-                  }
-                }
-              );
-
-            output.on(
-              "close",
-              resolve
-            );
-
-            output.on(
-              "error",
-              reject
-            );
-
-            archive.on(
-              "error",
-              reject
-            );
-
-            archive.pipe(
-              output
-            );
-
-            for (
-              const file
-              of job.files
-            ) {
-
-              archive.file(
-                path.join(
-                  dir,
-                  file.name
-                ),
-                {
-                  name:
-                    file.name
-                }
-              );
-            }
-
-            archive.finalize();
-          }
-        );
-
-
-        /* ================================================
-           7. FINALIZADO
-           ================================================ */
-
-        job.status =
-          "done";
 
         job.current =
           "Concluído";
+
+        job.status =
+          "done";
 
         job.zip =
           `/api/jobs/${id}/zip`;
@@ -1172,7 +1200,7 @@ app.get(
 
   requireAuth,
 
-  (req, res) => {
+  async (req, res) => {
 
     const job =
       jobs.get(
@@ -1200,29 +1228,151 @@ app.get(
         );
     }
 
-    if (!job.zip) {
+    if (
+      job.status !==
+      "done"
+    ) {
 
       return res
-        .status(404)
+        .status(400)
         .send(
-          "ZIP ainda não está pronto."
+          "O processamento ainda não terminou."
         );
     }
 
-    res.download(
-      path.join(
-        JOBS,
-        req.params.id,
-        "geramix-videos.zip"
-      ),
-      "geramix-videos.zip"
+    res.statusCode = 200;
+
+    res.setHeader(
+      "Content-Type",
+      "application/zip"
     );
+
+    res.setHeader(
+      "Content-Disposition",
+      'attachment; filename="geramix-videos.zip"'
+    );
+
+    const archive =
+      archiver(
+        "zip",
+        {
+          zlib: {
+            level: 0
+          }
+        }
+      );
+
+    archive.on(
+      "error",
+      error => {
+        console.error(
+          "Erro criando ZIP:",
+          error
+        );
+
+        if (!res.headersSent) {
+          res.status(500).send(
+            "Erro ao criar ZIP."
+          );
+        } else {
+          res.destroy(error);
+        }
+      }
+    );
+
+    archive.pipe(res);
+
+    try {
+
+      for (
+        const file
+        of job.files
+      ) {
+
+        const tempVideo =
+          await createVideoForJob(
+            job,
+            file
+          );
+
+        try {
+
+          await new Promise(
+            (resolve, reject) => {
+
+              const input =
+                fs.createReadStream(
+                  tempVideo
+                );
+
+              input.on(
+                "error",
+                reject
+              );
+
+              input.on(
+                "close",
+                resolve
+              );
+
+              archive.append(
+                input,
+                {
+                  name:
+                    file.name
+                }
+              );
+
+            }
+          );
+
+        } finally {
+
+          await fsp.rm(
+            tempVideo,
+            {
+              force: true
+            }
+          );
+        }
+      }
+
+      await archive.finalize();
+
+    } catch (error) {
+
+      console.error(
+        "Erro no download ZIP:",
+        error
+      );
+
+      await fsp.rm(
+        path.join(
+          JOBS,
+          job.id
+        ),
+        {
+          recursive: true,
+          force: true
+        }
+      ).catch(() => {});
+
+      if (!res.headersSent) {
+        return res
+          .status(500)
+          .send(
+            "Erro ao criar ZIP."
+          );
+      }
+
+      res.destroy(error);
+    }
   }
 );
 
 
 /* =========================================================
-   DOWNLOAD VÍDEO
+   DOWNLOAD / VISUALIZAÇÃO DE VÍDEO
    ========================================================= */
 
 app.get(
@@ -1230,7 +1380,7 @@ app.get(
 
   requireAuth,
 
-  (req, res) => {
+  async (req, res) => {
 
     const job =
       jobs.get(
@@ -1253,23 +1403,74 @@ app.get(
         req.params.name
       );
 
-    if (
-      !job.files.some(
-        file =>
-          file.name === name
-      )
-    ) {
+    const file =
+      job.files.find(
+        item =>
+          item.name === name
+      );
+
+    if (!file) {
       return res.sendStatus(404);
     }
 
-    res.download(
-      path.join(
-        JOBS,
-        req.params.id,
-        name
-      ),
-      name
-    );
+    let tempVideo = null;
+
+    try {
+
+      tempVideo =
+        await createVideoForJob(
+          job,
+          file
+        );
+
+      res.download(
+        tempVideo,
+        name,
+        error => {
+
+          fsp.rm(
+            tempVideo,
+            {
+              force: true
+            }
+          ).catch(() => {});
+
+          if (error) {
+            console.error(
+              "Erro enviando vídeo:",
+              error
+            );
+          }
+
+        }
+      );
+
+    } catch (error) {
+
+      if (tempVideo) {
+        await fsp.rm(
+          tempVideo,
+          {
+            force: true
+          }
+        ).catch(() => {});
+      }
+
+      console.error(
+        "Erro montando vídeo:",
+        error
+      );
+
+      if (!res.headersSent) {
+        return res
+          .status(500)
+          .send(
+            "Erro ao montar o vídeo."
+          );
+      }
+
+      res.destroy(error);
+    }
   }
 );
 
