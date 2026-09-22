@@ -218,7 +218,17 @@ app.get("/health", (_, res) => {
    CONFIGURAÇÕES
    ========================================================= */
 
-const FFMPEG_CONCURRENCY = 1;
+/*
+ * ALTERAÇÃO DE VELOCIDADE:
+ *
+ * Antes:
+ * FFMPEG_CONCURRENCY = 1
+ *
+ * Agora:
+ * 2 normalizações podem acontecer
+ * simultaneamente.
+ */
+const FFMPEG_CONCURRENCY = 2;
 
 const MAX_COMBINATIONS = 1000;
 
@@ -241,7 +251,8 @@ function runFFmpeg(args, cwd) {
 
             /*
              * Mantemos apenas 1 thread
-             * para controlar o consumo de memória.
+             * por processo para controlar
+             * o consumo de memória.
              */
             "-threads",
             "1",
@@ -427,6 +438,97 @@ async function normalizeVideo(
 
 
 /* =========================================================
+   FILA DE NORMALIZAÇÃO
+   ========================================================= */
+
+/*
+ * ALTERAÇÃO DE VELOCIDADE:
+ *
+ * Permite executar até 2 normalizações
+ * simultaneamente.
+ *
+ * As combinações finais continuam
+ * sendo montadas uma por vez.
+ */
+
+async function normalizeFiles(
+  files,
+  prefix,
+  normalizedArray,
+  dir,
+  cwd
+) {
+
+  let nextIndex = 0;
+
+  async function worker() {
+
+    while (true) {
+
+      const i =
+        nextIndex++;
+
+      if (i >= files.length) {
+        return;
+      }
+
+      const file =
+        files[i];
+
+      const output =
+        path.join(
+          dir,
+          `${prefix}-${String(i + 1).padStart(3, "0")}.mp4`
+        );
+
+      await normalizeVideo(
+        file.path,
+        output,
+        cwd
+      );
+
+      normalizedArray[i] = {
+        source:
+          file,
+
+        path:
+          output
+      };
+
+      await fsp.rm(
+        file.path,
+        {
+          force: true
+        }
+      );
+    }
+  }
+
+  const workers = [];
+
+  const workerCount =
+    Math.min(
+      FFMPEG_CONCURRENCY,
+      files.length
+    );
+
+  for (
+    let i = 0;
+    i < workerCount;
+    i++
+  ) {
+    workers.push(
+      worker()
+    );
+  }
+
+  await Promise.all(
+    workers
+  );
+}
+
+
+/* =========================================================
    JUNTA VÍDEOS NORMALIZADOS
    ========================================================= */
 
@@ -479,14 +581,8 @@ async function concatNormalized(
         "copy",
 
         /*
-         * ALTERAÇÃO DE VELOCIDADE:
-         *
-         * Removido:
-         * -movflags +faststart
-         *
-         * Isso evita a etapa extra de
-         * movimentação do índice do MP4
-         * em cada vídeo gerado.
+         * Mantido sem faststart para
+         * evitar etapa extra em cada vídeo.
          */
 
         "-y",
@@ -725,42 +821,13 @@ app.post(
         job.current =
           "Preparando ganchos…";
 
-        for (
-          let i = 0;
-          i < hooks.length;
-          i++
-        ) {
-
-          const file =
-            hooks[i];
-
-          const output =
-            path.join(
-              dir,
-              `hook-${String(i + 1).padStart(3, "0")}.mp4`
-            );
-
-          await normalizeVideo(
-            file.path,
-            output,
-            dir
-          );
-
-          normalizedHooks.push({
-            source:
-              file,
-
-            path:
-              output
-          });
-
-          await fsp.rm(
-            file.path,
-            {
-              force: true
-            }
-          );
-        }
+        await normalizeFiles(
+          hooks,
+          "hook",
+          normalizedHooks,
+          dir,
+          dir
+        );
 
 
         /* ================================================
@@ -770,42 +837,13 @@ app.post(
         job.current =
           "Preparando corpos…";
 
-        for (
-          let i = 0;
-          i < bodies.length;
-          i++
-        ) {
-
-          const file =
-            bodies[i];
-
-          const output =
-            path.join(
-              dir,
-              `body-${String(i + 1).padStart(3, "0")}.mp4`
-            );
-
-          await normalizeVideo(
-            file.path,
-            output,
-            dir
-          );
-
-          normalizedBodies.push({
-            source:
-              file,
-
-            path:
-              output
-          });
-
-          await fsp.rm(
-            file.path,
-            {
-              force: true
-            }
-          );
-        }
+        await normalizeFiles(
+          bodies,
+          "body",
+          normalizedBodies,
+          dir,
+          dir
+        );
 
 
         /* ================================================
@@ -815,42 +853,13 @@ app.post(
         job.current =
           "Preparando CTAs…";
 
-        for (
-          let i = 0;
-          i < ctas.length;
-          i++
-        ) {
-
-          const file =
-            ctas[i];
-
-          const output =
-            path.join(
-              dir,
-              `cta-${String(i + 1).padStart(3, "0")}.mp4`
-            );
-
-          await normalizeVideo(
-            file.path,
-            output,
-            dir
-          );
-
-          normalizedCtas.push({
-            source:
-              file,
-
-            path:
-              output
-          });
-
-          await fsp.rm(
-            file.path,
-            {
-              force: true
-            }
-          );
-        }
+        await normalizeFiles(
+          ctas,
+          "cta",
+          normalizedCtas,
+          dir,
+          dir
+        );
 
 
         /* ================================================
