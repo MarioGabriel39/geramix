@@ -129,6 +129,7 @@ async function requireAuth(req, res, next) {
         `${SUPABASE_URL}/auth/v1/user`,
         {
           method: "GET",
+
           headers: {
             "Authorization":
               `Bearer ${token}`,
@@ -239,8 +240,8 @@ function runFFmpeg(args, cwd) {
             "error",
 
             /*
-             * Mantemos 1 thread para evitar
-             * novo estouro de memória no Render.
+             * Apenas 1 thread para manter
+             * o consumo de memória controlado.
              */
             "-threads",
             "1",
@@ -260,7 +261,8 @@ function runFFmpeg(args, cwd) {
           err += data.toString();
 
           if (err.length > 10000) {
-            err = err.slice(-10000);
+            err =
+              err.slice(-10000);
           }
         }
       );
@@ -294,22 +296,34 @@ function runFFmpeg(args, cwd) {
 
 
 /* =========================================================
-   VERIFICA ÁUDIO
+   VERIFICA ÁUDIO — SEM PROCESSAR O ARQUIVO INTEIRO
    ========================================================= */
 
 async function hasAudio(input, cwd) {
   try {
 
+    /*
+     * Apenas verifica se existe a primeira
+     * faixa de áudio.
+     *
+     * Não copia o áudio inteiro.
+     * Não processa o vídeo inteiro.
+     * Isso é muito mais rápido que a versão anterior.
+     */
     await runFFmpeg(
       [
         "-i",
         input,
+
         "-map",
         "0:a:0",
-        "-c",
-        "copy",
+
+        "-frames:a",
+        "0",
+
         "-f",
         "null",
+
         "-"
       ],
       cwd
@@ -345,8 +359,8 @@ async function normalizeVideo(
   ];
 
   /*
-   * Se não houver áudio, cria uma faixa
-   * de silêncio.
+   * Se não houver áudio, adiciona
+   * uma faixa de silêncio.
    */
   if (!audio) {
     args.push(
@@ -366,6 +380,10 @@ async function normalizeVideo(
       ? "0:a:0"
       : "1:a:0",
 
+    /*
+     * Todos os vídeos ficam com exatamente
+     * o mesmo padrão.
+     */
     "-vf",
     "scale=720:1280:force_original_aspect_ratio=decrease," +
     "pad=720:1280:(ow-iw)/2:(oh-ih)/2," +
@@ -377,16 +395,11 @@ async function normalizeVideo(
     "libx264",
 
     /*
-     * Ultrafast reduz bastante o tempo
-     * de codificação.
+     * Prioridade para velocidade.
      */
     "-preset",
     "ultrafast",
 
-    /*
-     * CRF 28 mantém arquivos menores
-     * e reduz processamento.
-     */
     "-crf",
     "28",
 
@@ -410,9 +423,14 @@ async function normalizeVideo(
 
     "-shortest",
 
-    "-movflags",
-    "+faststart",
-
+    /*
+     * IMPORTANTE:
+     * não usamos +faststart aqui.
+     *
+     * Esses arquivos são intermediários.
+     * Fazer faststart neles só acrescenta
+     * trabalho.
+     */
     "-y",
     output
   );
@@ -468,12 +486,19 @@ async function concatNormalized(
         listFile,
 
         /*
-         * Os vídeos já estão normalizados.
-         * Aqui não há nova codificação.
+         * Os arquivos já foram
+         * normalizados.
+         *
+         * Portanto não há nova
+         * codificação aqui.
          */
         "-c",
         "copy",
 
+        /*
+         * O faststart fica somente
+         * no arquivo final.
+         */
         "-movflags",
         "+faststart",
 
@@ -549,75 +574,6 @@ function calculateOriginality(
   }
 
   return 70 + different * 10;
-}
-
-
-/* =========================================================
-   POOL
-   ========================================================= */
-
-async function runPool(
-  items,
-  worker,
-  concurrency,
-  onProgress
-) {
-
-  let nextIndex = 0;
-  let completed = 0;
-
-  async function runner() {
-
-    while (true) {
-
-      const index =
-        nextIndex++;
-
-      if (
-        index >=
-        items.length
-      ) {
-        return;
-      }
-
-      await worker(
-        items[index],
-        index
-      );
-
-      completed++;
-
-      if (onProgress) {
-        onProgress(
-          completed,
-          items.length
-        );
-      }
-    }
-  }
-
-  const amount =
-    Math.min(
-      concurrency,
-      items.length
-    );
-
-  const workers = [];
-
-  for (
-    let i = 0;
-    i < amount;
-    i++
-  ) {
-
-    workers.push(
-      runner()
-    );
-  }
-
-  await Promise.all(
-    workers
-  );
 }
 
 
@@ -764,23 +720,20 @@ app.post(
 
 
     /* =====================================================
-       PROCESSAMENTO EM SEGUNDO PLANO
+       PROCESSAMENTO
        ===================================================== */
 
     (async () => {
 
-      /*
-       * Guarda os arquivos normalizados.
-       */
       const normalizedHooks = [];
       const normalizedBodies = [];
       const normalizedCtas = [];
 
       try {
 
-        /* =================================================
-           1. NORMALIZA GANCHOS UMA ÚNICA VEZ
-           ================================================= */
+        /* ================================================
+           1. GANCHOS
+           ================================================ */
 
         job.current =
           "Preparando ganchos…";
@@ -814,10 +767,6 @@ app.post(
               output
           });
 
-          /*
-           * O upload original já não é mais
-           * necessário depois da normalização.
-           */
           await fsp.rm(
             file.path,
             {
@@ -827,9 +776,9 @@ app.post(
         }
 
 
-        /* =================================================
-           2. NORMALIZA CORPOS UMA ÚNICA VEZ
-           ================================================= */
+        /* ================================================
+           2. CORPOS
+           ================================================ */
 
         job.current =
           "Preparando corpos…";
@@ -872,9 +821,9 @@ app.post(
         }
 
 
-        /* =================================================
-           3. NORMALIZA CTAs UMA ÚNICA VEZ
-           ================================================= */
+        /* ================================================
+           3. CTAs
+           ================================================ */
 
         job.current =
           "Preparando CTAs…";
@@ -917,9 +866,9 @@ app.post(
         }
 
 
-        /* =================================================
-           4. MONTA COMBINAÇÕES
-           ================================================= */
+        /* ================================================
+           4. COMBINAÇÕES
+           ================================================ */
 
         job.current =
           "Montando vídeos…";
@@ -953,8 +902,9 @@ app.post(
                 `Gerando vídeos: ${index}/${total}`;
 
               /*
-               * Agora é apenas concatenação
-               * dos arquivos já normalizados.
+               * Aqui ocorre somente a junção.
+               *
+               * Não há nova codificação.
                */
               await concatNormalized(
                 [
@@ -966,9 +916,11 @@ app.post(
                 dir
               );
 
-              /*
-               * Mantém a lógica de originalidade.
-               */
+
+              /* ==========================================
+                 ORIGINALIDADE
+                 ========================================== */
+
               const currentCombination = {
                 hook: {
                   path:
@@ -1031,6 +983,11 @@ app.post(
                   previousCombination
                 );
 
+
+              /* ==========================================
+                 SALVA RESULTADO
+                 ========================================== */
+
               job.files.push({
 
                 name:
@@ -1065,9 +1022,9 @@ app.post(
         }
 
 
-        /* =================================================
-           5. ORDENA RESULTADOS
-           ================================================= */
+        /* ================================================
+           5. ORDENA
+           ================================================ */
 
         job.files.sort(
           (a, b) =>
@@ -1075,9 +1032,9 @@ app.post(
         );
 
 
-        /* =================================================
-           6. CRIA ZIP
-           ================================================= */
+        /* ================================================
+           6. ZIP
+           ================================================ */
 
         job.current =
           "Criando ZIP…";
@@ -1100,6 +1057,10 @@ app.post(
               archiver(
                 "zip",
                 {
+                  /*
+                   * Os MP4 já são comprimidos.
+                   * Não precisamos recomprimir.
+                   */
                   zlib: {
                     level: 0
                   }
@@ -1147,9 +1108,9 @@ app.post(
         );
 
 
-        /* =================================================
+        /* ================================================
            7. FINALIZADO
-           ================================================= */
+           ================================================ */
 
         job.status =
           "done";
@@ -1177,10 +1138,6 @@ app.post(
         job.current =
           "Falhou";
 
-
-        /*
-         * Remove uploads que ainda existirem.
-         */
         await Promise.all(
           [
             ...hooks,
@@ -1196,7 +1153,6 @@ app.post(
               )
           )
         );
-
       }
 
     })();
