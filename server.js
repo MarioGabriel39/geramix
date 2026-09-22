@@ -12,35 +12,13 @@ import { createClient } from "@supabase/supabase-js";
 
 const app = express();
 
-const PORT =
-  process.env.PORT || 3000;
+const PORT = process.env.PORT || 3000;
+const ROOT = process.cwd();
+const PUBLIC = path.join(ROOT, "public");
 
-const ROOT =
-  process.cwd();
-
-const PUBLIC =
-  path.join(
-    ROOT,
-    "public"
-  );
-
-const BASE =
-  path.join(
-    os.tmpdir(),
-    "geramix"
-  );
-
-const UPLOADS =
-  path.join(
-    BASE,
-    "uploads"
-  );
-
-const JOBS =
-  path.join(
-    BASE,
-    "jobs"
-  );
+const BASE = path.join(os.tmpdir(), "geramix");
+const UPLOADS = path.join(BASE, "uploads");
+const JOBS = path.join(BASE, "jobs");
 
 
 /* =========================================================
@@ -53,37 +31,23 @@ const SUPABASE_URL =
 const SUPABASE_ANON_KEY =
   process.env.SUPABASE_ANON_KEY;
 
-
-if (
-  !SUPABASE_URL ||
-  !SUPABASE_ANON_KEY
-) {
+if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
   throw new Error(
     "SUPABASE_URL e SUPABASE_ANON_KEY precisam estar configuradas no Render."
   );
 }
 
-
-/*
- * Cliente Supabase exclusivo do servidor.
- *
- * O servidor NÃO deve manter uma sessão própria.
- * Ele apenas recebe e valida o access token
- * enviado pelo navegador.
- */
-
-const supabase =
-  createClient(
-    SUPABASE_URL,
-    SUPABASE_ANON_KEY,
-    {
-      auth: {
-        autoRefreshToken: false,
-        persistSession: false,
-        detectSessionInUrl: false
-      }
+const supabase = createClient(
+  SUPABASE_URL,
+  SUPABASE_ANON_KEY,
+  {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false,
+      detectSessionInUrl: false
     }
-  );
+  }
+);
 
 
 /* =========================================================
@@ -91,19 +55,8 @@ const supabase =
    ========================================================= */
 
 await Promise.all([
-  fsp.mkdir(
-    UPLOADS,
-    {
-      recursive: true
-    }
-  ),
-
-  fsp.mkdir(
-    JOBS,
-    {
-      recursive: true
-    }
-  )
+  fsp.mkdir(UPLOADS, { recursive: true }),
+  fsp.mkdir(JOBS, { recursive: true })
 ]);
 
 
@@ -111,163 +64,104 @@ await Promise.all([
    ARQUIVOS PÚBLICOS
    ========================================================= */
 
-app.use(
-  express.static(
-    PUBLIC
-  )
-);
+app.use(express.static(PUBLIC));
 
 
 /* =========================================================
    CONFIGURAÇÃO DO FRONT-END
    ========================================================= */
 
-app.get(
-  "/api/config",
-  (_, res) => {
+app.get("/api/config", (_, res) => {
 
-    res.setHeader(
-      "Cache-Control",
-      "no-store"
-    );
+  res.setHeader(
+    "Cache-Control",
+    "no-store"
+  );
 
-    res.json({
-      supabaseUrl:
-        SUPABASE_URL,
+  res.json({
+    supabaseUrl: SUPABASE_URL,
+    supabaseAnonKey: SUPABASE_ANON_KEY
+  });
 
-      supabaseAnonKey:
-        SUPABASE_ANON_KEY
-    });
-
-  }
-);
+});
 
 
 /* =========================================================
    AUTENTICAÇÃO
    ========================================================= */
 
-async function requireAuth(
-  req,
-  res,
-  next
-) {
+async function requireAuth(req, res, next) {
 
   try {
 
-    let token = "";
-
-
-    /*
-     * Primeiro tenta o cabeçalho:
-     *
-     * Authorization: Bearer TOKEN
-     */
-
     const authorization =
       String(
-        req.headers.authorization ||
-        ""
+        req.headers.authorization || ""
       ).trim();
 
+    let token = "";
 
     if (
       authorization
         .toLowerCase()
-        .startsWith(
-          "bearer "
-        )
+        .startsWith("bearer ")
     ) {
 
       token =
         authorization
-          .substring(7)
+          .slice(7)
           .trim();
 
     }
 
-
     /*
-     * Para vídeos e ZIP,
-     * também aceitamos token pela URL.
-     *
-     * Isso mantém compatibilidade
-     * com o index.html atual.
+     * Mantemos token pela URL somente para
+     * compatibilidade com os links de vídeo e ZIP.
      */
 
-    if (
-      !token
-    ) {
+    if (!token) {
 
       token =
         String(
-          req.query.token ||
-          ""
+          req.query.token || ""
         ).trim();
 
     }
 
+    if (!token) {
 
-    if (
-      !token
-    ) {
-
-      return res
-        .status(401)
-        .json({
-          error:
-            "Não autenticado."
-        });
+      return res.status(401).json({
+        error: "Não autenticado."
+      });
 
     }
 
-
     /*
-     * A Publishable Key NÃO é um access token.
-     *
-     * Um access token de usuário é um JWT.
-     * Portanto, se por algum motivo o front
-     * mandar a chave sb_ no lugar do token,
-     * rejeitamos imediatamente.
+     * Publishable Key não é access token.
      */
 
-    if (
-      token.startsWith(
-        "sb_"
-      )
-    ) {
+    if (token.startsWith("sb_")) {
 
       console.error(
-        "GeraMix: o navegador enviou uma chave Supabase em vez do access token do usuário."
+        "GeraMix: chave Supabase recebida no lugar do access token."
       );
 
-
-      return res
-        .status(401)
-        .json({
-          error:
-            "Sessão inválida ou expirada."
-        });
+      return res.status(401).json({
+        error:
+          "Sessão inválida ou expirada."
+      });
 
     }
 
-
     /*
-     * Validação real no Supabase.
-     *
-     * O getUser(jwt) faz uma consulta ao
-     * servidor de autenticação e retorna
-     * um usuário autenticado.
+     * Validação real do usuário no Supabase.
      */
 
     const {
       data,
       error
     } =
-      await supabase.auth.getUser(
-        token
-      );
-
+      await supabase.auth.getUser(token);
 
     if (
       error ||
@@ -275,46 +169,33 @@ async function requireAuth(
     ) {
 
       console.error(
-        "GeraMix: token rejeitado pelo Supabase:",
+        "GeraMix: token rejeitado:",
         error?.message ||
         "usuário não encontrado"
       );
 
-
-      return res
-        .status(401)
-        .json({
-          error:
-            "Sessão inválida ou expirada."
-        });
+      return res.status(401).json({
+        error:
+          "Sessão inválida ou expirada."
+      });
 
     }
 
-
-    /*
-     * Usuário autenticado.
-     */
-
-    req.user =
-      data.user;
-
+    req.user = data.user;
 
     next();
 
   } catch (error) {
 
     console.error(
-      "Erro na autenticação do GeraMix:",
+      "Erro na autenticação:",
       error
     );
 
-
-    return res
-      .status(401)
-      .json({
-        error:
-          "Não foi possível validar sua sessão."
-      });
+    return res.status(401).json({
+      error:
+        "Não foi possível validar sua sessão."
+    });
 
   }
 
@@ -325,24 +206,15 @@ async function requireAuth(
    HEALTH
    ========================================================= */
 
-app.get(
-  "/health",
-  (_, res) => {
+app.get("/health", (_, res) => {
 
-    res.json({
-      ok: true,
+  res.json({
+    ok: true,
+    service: "geramix",
+    ffmpeg: Boolean(ffmpegPath)
+  });
 
-      service:
-        "geramix",
-
-      ffmpeg:
-        Boolean(
-          ffmpegPath
-        )
-    });
-
-  }
-);
+});
 
 
 /* =========================================================
@@ -355,31 +227,22 @@ const FFMPEG_CONCURRENCY =
     Math.min(
       3,
       Number(
-        process.env.FFMPEG_CONCURRENCY ||
-        2
+        process.env.FFMPEG_CONCURRENCY || 2
       )
     )
   );
 
-
-const MAX_COMBINATIONS =
-  1000;
+const MAX_COMBINATIONS = 1000;
 
 
 /* =========================================================
-   FFmpeg
+   FFMPEG
    ========================================================= */
 
-function runFFmpeg(
-  args,
-  cwd
-) {
+function runFFmpeg(args, cwd) {
 
   return new Promise(
-    (
-      resolve,
-      reject
-    ) => {
+    (resolve, reject) => {
 
       const p =
         spawn(
@@ -390,39 +253,28 @@ function runFFmpeg(
             "error",
             ...args
           ],
-          {
-            cwd
-          }
+          { cwd }
         );
-
 
       let err = "";
 
-
       p.stderr.on(
         "data",
-        d => {
-
-          err +=
-            d.toString();
-
+        data => {
+          err += data.toString();
         }
       );
-
 
       p.on(
         "error",
         reject
       );
 
-
       p.on(
         "close",
         code => {
 
-          if (
-            code === 0
-          ) {
+          if (code === 0) {
 
             resolve();
 
@@ -450,10 +302,7 @@ function runFFmpeg(
    VERIFICA ÁUDIO
    ========================================================= */
 
-async function hasAudio(
-  input,
-  cwd
-) {
+async function hasAudio(input, cwd) {
 
   try {
 
@@ -461,21 +310,16 @@ async function hasAudio(
       [
         "-i",
         input,
-
         "-map",
         "0:a:0",
-
         "-c",
         "copy",
-
         "-f",
         "null",
-
         "-"
       ],
       cwd
     );
-
 
     return true;
 
@@ -492,21 +336,16 @@ async function hasAudio(
    NOME SEGURO
    ========================================================= */
 
-function safeName(
-  name
-) {
+function safeName(name) {
 
   return String(
-    name ||
-    "video"
+    name || "video"
   )
     .replace(
       /[^a-zA-Z0-9._-]/g,
       "_"
     )
-    .slice(
-      -100
-    );
+    .slice(-100);
 
 }
 
@@ -520,53 +359,34 @@ function calculateOriginality(
   previous
 ) {
 
-  if (
-    !previous
-  ) {
-
+  if (!previous) {
     return 100;
-
   }
 
-
-  let different =
-    0;
-
+  let different = 0;
 
   if (
     current.hook.path !==
     previous.hook.path
   ) {
-
     different++;
-
   }
-
 
   if (
     current.body.path !==
     previous.body.path
   ) {
-
     different++;
-
   }
-
 
   if (
     current.cta.path !==
     previous.cta.path
   ) {
-
     different++;
-
   }
 
-
-  return (
-    70 +
-    different * 10
-  );
+  return 70 + different * 10;
 
 }
 
@@ -589,10 +409,7 @@ async function concat3(
     cta
   ];
 
-
-  const audioFlags =
-    [];
-
+  const audioFlags = [];
 
   for (
     const input
@@ -608,14 +425,7 @@ async function concat3(
 
   }
 
-
-  const args =
-    [];
-
-
-  /*
-   * Entradas
-   */
+  const args = [];
 
   for (
     const input
@@ -629,14 +439,7 @@ async function concat3(
 
   }
 
-
-  /*
-   * Áudios silenciosos
-   */
-
-  const silentIndexes =
-    [];
-
+  const silentIndexes = [];
 
   for (
     let i = 0;
@@ -644,27 +447,21 @@ async function concat3(
     i++
   ) {
 
-    if (
-      !audioFlags[i]
-    ) {
+    if (!audioFlags[i]) {
 
       const silentIndex =
         inputs.length +
         silentIndexes.length;
 
-
       silentIndexes.push(
         silentIndex
       );
 
-
       args.push(
         "-f",
         "lavfi",
-
         "-t",
         "86400",
-
         "-i",
         "anullsrc=r=48000:cl=stereo"
       );
@@ -673,14 +470,7 @@ async function concat3(
 
   }
 
-
-  const filterParts =
-    [];
-
-
-  /*
-   * Vídeos
-   */
+  const filterParts = [];
 
   for (
     let i = 0;
@@ -701,14 +491,7 @@ async function concat3(
 
   }
 
-
-  /*
-   * Áudios
-   */
-
-  let silentCounter =
-    0;
-
+  let silentCounter = 0;
 
   for (
     let i = 0;
@@ -716,9 +499,7 @@ async function concat3(
     i++
   ) {
 
-    if (
-      audioFlags[i]
-    ) {
+    if (audioFlags[i]) {
 
       filterParts.push(
         `[${i}:a:0]` +
@@ -734,13 +515,11 @@ async function concat3(
         inputs.length +
         silentCounter;
 
-
       filterParts.push(
         `[${silentIndex}:a:0]` +
         `asetpts=PTS-STARTPTS` +
         `[a${i}]`
       );
-
 
       silentCounter++;
 
@@ -748,14 +527,7 @@ async function concat3(
 
   }
 
-
-  /*
-   * Concat
-   */
-
-  let concatInputs =
-    "";
-
+  let concatInputs = "";
 
   for (
     let i = 0;
@@ -768,66 +540,42 @@ async function concat3(
 
   }
 
-
   filterParts.push(
     `${concatInputs}` +
     `concat=n=3:v=1:a=1:` +
     `[vout][aout]`
   );
 
-
-  const filterComplex =
-    filterParts.join(
-      ";"
-    );
-
-
   args.push(
-
     "-filter_complex",
-    filterComplex,
-
+    filterParts.join(";"),
     "-map",
     "[vout]",
-
     "-map",
     "[aout]",
-
     "-c:v",
     "libx264",
-
     "-preset",
     "veryfast",
-
     "-crf",
     "23",
-
     "-pix_fmt",
     "yuv420p",
-
     "-r",
     "30",
-
     "-c:a",
     "aac",
-
     "-ar",
     "48000",
-
     "-ac",
     "2",
-
     "-b:a",
     "128k",
-
     "-movflags",
     "+faststart",
-
     "-y",
     output
-
   );
-
 
   await runFFmpeg(
     args,
@@ -838,7 +586,7 @@ async function concat3(
 
 
 /* =========================================================
-   POOL DE PROCESSAMENTO
+   POOL
    ========================================================= */
 
 async function runPool(
@@ -848,13 +596,8 @@ async function runPool(
   onProgress
 ) {
 
-  let nextIndex =
-    0;
-
-
-  let completed =
-    0;
-
+  let nextIndex = 0;
+  let completed = 0;
 
   async function runner() {
 
@@ -863,29 +606,21 @@ async function runPool(
       const index =
         nextIndex++;
 
-
       if (
         index >=
         items.length
       ) {
-
         return;
-
       }
-
 
       await worker(
         items[index],
         index
       );
 
-
       completed++;
 
-
-      if (
-        onProgress
-      ) {
+      if (onProgress) {
 
         onProgress(
           completed,
@@ -898,17 +633,13 @@ async function runPool(
 
   }
 
-
   const amount =
     Math.min(
       concurrency,
       items.length
     );
 
-
-  const workers =
-    [];
-
+  const workers = [];
 
   for (
     let i = 0;
@@ -921,7 +652,6 @@ async function runPool(
     );
 
   }
-
 
   await Promise.all(
     workers
@@ -936,22 +666,12 @@ async function runPool(
 
 const upload =
   multer({
-
-    dest:
-      UPLOADS,
-
+    dest: UPLOADS,
     limits: {
-
-      files:
-        30,
-
+      files: 30,
       fileSize:
-        200 *
-        1024 *
-        1024
-
+        200 * 1024 * 1024
     }
-
   });
 
 
@@ -959,67 +679,40 @@ const upload =
    JOBS
    ========================================================= */
 
-const jobs =
-  new Map();
+const jobs = new Map();
 
 
 /* =========================================================
-   CRIA PROCESSAMENTO
+   CRIA JOB
    ========================================================= */
 
 app.post(
-
   "/api/jobs",
-
   requireAuth,
-
   upload.fields([
-
     {
-      name:
-        "hooks",
-
-      maxCount:
-        10
+      name: "hooks",
+      maxCount: 10
     },
-
     {
-      name:
-        "bodies",
-
-      maxCount:
-        10
+      name: "bodies",
+      maxCount: 10
     },
-
     {
-      name:
-        "ctas",
-
-      maxCount:
-        10
+      name: "ctas",
+      maxCount: 10
     }
-
   ]),
-
-  async (
-    req,
-    res
-  ) => {
+  async (req, res) => {
 
     const hooks =
-      req.files?.hooks ||
-      [];
-
+      req.files?.hooks || [];
 
     const bodies =
-      req.files?.bodies ||
-      [];
-
+      req.files?.bodies || [];
 
     const ctas =
-      req.files?.ctas ||
-      [];
-
+      req.files?.ctas || [];
 
     if (
       !hooks.length ||
@@ -1027,44 +720,32 @@ app.post(
       !ctas.length
     ) {
 
-      return res
-        .status(400)
-        .json({
-
-          error:
-            "Envie pelo menos 1 vídeo em cada categoria."
-
-        });
+      return res.status(400).json({
+        error:
+          "Envie pelo menos 1 vídeo em cada categoria."
+      });
 
     }
-
 
     const total =
       hooks.length *
       bodies.length *
       ctas.length;
 
-
     if (
       total >
       MAX_COMBINATIONS
     ) {
 
-      return res
-        .status(400)
-        .json({
-
-          error:
-            `Limite de ${MAX_COMBINATIONS} combinações por lote.`
-
-        });
+      return res.status(400).json({
+        error:
+          `Limite de ${MAX_COMBINATIONS} combinações por lote.`
+      });
 
     }
 
-
     const id =
       crypto.randomUUID();
-
 
     const dir =
       path.join(
@@ -1072,65 +753,38 @@ app.post(
         id
       );
 
-
     await fsp.mkdir(
       dir,
-      {
-        recursive:
-          true
-      }
+      { recursive: true }
     );
 
-
     const job = {
-
       id,
-
-      userId:
-        req.user.id,
-
-      status:
-        "processing",
-
+      userId: req.user.id,
+      status: "processing",
       total,
-
-      done:
-        0,
-
-      current:
-        "Iniciando…",
-
-      files:
-        [],
-
-      error:
-        null,
-
-      mode:
-        "montagem-direta"
-
+      done: 0,
+      current: "Iniciando…",
+      files: [],
+      error: null,
+      mode: "montagem-direta"
     };
-
 
     jobs.set(
       id,
       job
     );
 
-
     res.json({
       id,
       total
     });
 
-
     (async () => {
 
       try {
 
-        const combinations =
-          [];
-
+        const combinations = [];
 
         for (
           const hook
@@ -1148,11 +802,9 @@ app.post(
             ) {
 
               combinations.push({
-
                 hook,
                 body,
                 cta
-
               });
 
             }
@@ -1161,15 +813,11 @@ app.post(
 
         }
 
-
         job.current =
           "Montando vídeos…";
 
-
         await runPool(
-
           combinations,
-
           async (
             {
               hook,
@@ -1182,54 +830,32 @@ app.post(
             const n =
               index + 1;
 
-
             const output =
               path.join(
-
                 dir,
-
                 `video-${String(n).padStart(3, "0")}.mp4`
-
               );
-
 
             job.current =
               `Gerando vídeos: ${n}/${total}`;
 
-
             await concat3(
-
               hook.path,
-
               body.path,
-
               cta.path,
-
               output,
-
               dir
-
             );
-
 
             const originality =
               calculateOriginality(
-
                 combinations[index],
-
-                combinations[
-                  index - 1
-                ]
-
+                combinations[index - 1]
               );
 
-
             job.files.push({
-
               name:
-                path.basename(
-                  output
-                ),
+                path.basename(output),
 
               hook:
                 safeName(
@@ -1246,122 +872,81 @@ app.post(
                   cta.originalname
                 ),
 
-              index:
-                n,
-
+              index: n,
               originality
-
             });
-
 
             job.done =
               job.files.length;
 
           },
-
           FFMPEG_CONCURRENCY
-
         );
-
 
         job.files.sort(
-          (
-            a,
-            b
-          ) =>
-            a.index -
-            b.index
+          (a, b) =>
+            a.index - b.index
         );
 
-
-        /*
-         * Apaga uploads originais.
-         */
-
         await Promise.all(
-
           [
             ...hooks,
             ...bodies,
             ...ctas
-
           ].map(
-
             file =>
               fsp.rm(
                 file.path,
-                {
-                  force:
-                    true
-                }
+                { force: true }
               )
-
           )
-
         );
-
 
         job.current =
           "Criando ZIP…";
 
-
         const zipPath =
           path.join(
-
             dir,
-
             "geramix-videos.zip"
-
           );
 
-
         await new Promise(
-
-          (
-            resolve,
-            reject
-          ) => {
+          (resolve, reject) => {
 
             const output =
               fs.createWriteStream(
                 zipPath
               );
 
-
             const archive =
               archiver(
                 "zip",
                 {
                   zlib: {
-                    level:
-                      0
+                    level: 0
                   }
                 }
               );
-
 
             output.on(
               "close",
               resolve
             );
 
-
             output.on(
               "error",
               reject
             );
-
 
             archive.on(
               "error",
               reject
             );
 
-
             archive.pipe(
               output
             );
-
 
             for (
               const file
@@ -1369,40 +954,31 @@ app.post(
             ) {
 
               archive.file(
-
                 path.join(
                   dir,
                   file.name
                 ),
-
                 {
                   name:
                     file.name
                 }
-
               );
 
             }
 
-
             archive.finalize();
 
           }
-
         );
-
 
         job.status =
           "done";
 
-
         job.current =
           "Concluído";
 
-
         job.zip =
           `/api/jobs/${id}/zip`;
-
 
       } catch (e) {
 
@@ -1411,40 +987,28 @@ app.post(
           e
         );
 
-
         job.status =
           "error";
-
 
         job.error =
           e?.message ||
           "Erro desconhecido";
 
-
         job.current =
           "Falhou";
 
-
         await Promise.all(
-
           [
             ...hooks,
             ...bodies,
             ...ctas
-
           ].map(
-
             file =>
               fsp.rm(
                 file.path,
-                {
-                  force:
-                    true
-                }
+                { force: true }
               )
-
           )
-
         );
 
       }
@@ -1452,70 +1016,47 @@ app.post(
     })();
 
   }
-
 );
 
 
 /* =========================================================
-   CONSULTA DO PROCESSAMENTO
+   CONSULTA JOB
    ========================================================= */
 
 app.get(
-
   "/api/jobs/:id",
-
   requireAuth,
-
-  (
-    req,
-    res
-  ) => {
+  (req, res) => {
 
     const job =
       jobs.get(
         req.params.id
       );
 
+    if (!job) {
 
-    if (
-      !job
-    ) {
-
-      return res
-        .status(404)
-        .json({
-
-          error:
-            "Processamento não encontrado."
-
-        });
+      return res.status(404).json({
+        error:
+          "Processamento não encontrado."
+      });
 
     }
-
 
     if (
       job.userId !==
       req.user.id
     ) {
 
-      return res
-        .status(404)
-        .json({
-
-          error:
-            "Processamento não encontrado."
-
-        });
+      return res.status(404).json({
+        error:
+          "Processamento não encontrado."
+      });
 
     }
 
-
-    res.json(
-      job
-    );
+    res.json(job);
 
   }
-
 );
 
 
@@ -1524,25 +1065,16 @@ app.get(
    ========================================================= */
 
 app.get(
-
   "/api/jobs/:id/zip",
-
   requireAuth,
-
-  (
-    req,
-    res
-  ) => {
+  (req, res) => {
 
     const job =
       jobs.get(
         req.params.id
       );
 
-
-    if (
-      !job
-    ) {
+    if (!job) {
 
       return res
         .status(404)
@@ -1551,7 +1083,6 @@ app.get(
         );
 
     }
-
 
     if (
       job.userId !==
@@ -1566,10 +1097,7 @@ app.get(
 
     }
 
-
-    if (
-      !job.zip
-    ) {
+    if (!job.zip) {
 
       return res
         .status(404)
@@ -1579,116 +1107,79 @@ app.get(
 
     }
 
-
     res.download(
-
       path.join(
-
         JOBS,
-
         req.params.id,
-
         "geramix-videos.zip"
-
       ),
-
       "geramix-videos.zip"
-
     );
 
   }
-
 );
 
 
 /* =========================================================
-   DOWNLOAD / VÍDEO
+   DOWNLOAD VÍDEO
    ========================================================= */
 
 app.get(
-
   "/api/jobs/:id/video/:name",
-
   requireAuth,
-
-  (
-    req,
-    res
-  ) => {
+  (req, res) => {
 
     const job =
       jobs.get(
         req.params.id
       );
 
+    if (!job) {
 
-    if (
-      !job
-    ) {
-
-      return res.sendStatus(
-        404
-      );
+      return res.sendStatus(404);
 
     }
-
 
     if (
       job.userId !==
       req.user.id
     ) {
 
-      return res.sendStatus(
-        404
-      );
+      return res.sendStatus(404);
 
     }
-
 
     const name =
       safeName(
         req.params.name
       );
 
-
     if (
       !job.files.some(
-        f =>
-          f.name ===
-          name
+        file =>
+          file.name === name
       )
     ) {
 
-      return res.sendStatus(
-        404
-      );
+      return res.sendStatus(404);
 
     }
 
-
     res.download(
-
       path.join(
-
         JOBS,
-
         req.params.id,
-
         name
-
       ),
-
       name
-
     );
 
   }
-
 );
 
 
 /* =========================================================
-   ERROS DO MULTER
+   ERROS
    ========================================================= */
 
 app.use(
@@ -1709,42 +1200,28 @@ app.use(
         error
       );
 
-
-      return res
-        .status(400)
-        .json({
-
-          error:
-            "Erro no envio dos vídeos: " +
-            error.message
-
-        });
+      return res.status(400).json({
+        error:
+          "Erro no envio dos vídeos: " +
+          error.message
+      });
 
     }
 
-
-    if (
-      error
-    ) {
+    if (error) {
 
       console.error(
         "Erro no servidor:",
         error
       );
 
-
-      return res
-        .status(500)
-        .json({
-
-          error:
-            error.message ||
-            "Erro interno do servidor."
-
-        });
+      return res.status(500).json({
+        error:
+          error.message ||
+          "Erro interno do servidor."
+      });
 
     }
-
 
     next();
 
@@ -1757,20 +1234,16 @@ app.use(
    ========================================================= */
 
 app.listen(
-
   PORT,
-
   () => {
 
     console.log(
       `GeraMix rodando na porta ${PORT}`
     );
 
-
     console.log(
       `FFmpeg simultâneos: ${FFMPEG_CONCURRENCY}`
     );
 
   }
-
 );
