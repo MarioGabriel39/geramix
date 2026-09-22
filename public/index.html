@@ -350,13 +350,17 @@ button:disabled{
 <main>
 
 <div class="logo">GeraMix</div>
+
 <div class="muted">
   Multiplicador de vídeos com processamento no servidor
 </div>
 
 <section class="card">
   <h2>1. Ganchos</h2>
-  <div class="muted">Até 10 vídeos de abertura</div>
+
+  <div class="muted">
+    Até 10 vídeos de abertura
+  </div>
 
   <label class="pick" for="hooks">
     ＋ Selecionar vídeos
@@ -374,7 +378,10 @@ button:disabled{
 
 <section class="card">
   <h2>2. Corpos</h2>
-  <div class="muted">Até 10 vídeos principais</div>
+
+  <div class="muted">
+    Até 10 vídeos principais
+  </div>
 
   <label class="pick" for="bodies">
     ＋ Selecionar vídeos
@@ -392,7 +399,10 @@ button:disabled{
 
 <section class="card">
   <h2>3. CTAs</h2>
-  <div class="muted">Até 10 vídeos finais</div>
+
+  <div class="muted">
+    Até 10 vídeos finais
+  </div>
 
   <label class="pick" for="ctas">
     ＋ Selecionar vídeos
@@ -444,7 +454,7 @@ button:disabled{
   </div>
 
   <div id="status" class="status">
-    Pronto.
+    Verificando sessão…
   </div>
 
   <a
@@ -471,7 +481,159 @@ button:disabled{
 
 </main>
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
 <script>
+
+/* =========================================================
+   SUPABASE
+   ========================================================= */
+
+let supabaseClient = null;
+
+
+/* =========================================================
+   CONFIGURAÇÃO E SESSÃO
+   ========================================================= */
+
+async function initializeAuth(){
+
+  try{
+
+    const configResponse =
+      await fetch(
+        "/api/config"
+      );
+
+    if(
+      !configResponse.ok
+    ){
+      throw new Error(
+        "Não foi possível carregar a configuração."
+      );
+    }
+
+    const config =
+      await configResponse.json();
+
+
+    if(
+      !config.supabaseUrl ||
+      !config.supabaseAnonKey
+    ){
+      throw new Error(
+        "Configuração do Supabase incompleta."
+      );
+    }
+
+
+    supabaseClient =
+      window.supabase.createClient(
+        config.supabaseUrl,
+        config.supabaseAnonKey
+      );
+
+
+    const {
+      data,
+      error
+    } =
+      await supabaseClient.auth.getSession();
+
+
+    if(
+      error ||
+      !data?.session
+    ){
+
+      window.location.href =
+        "/login.html";
+
+      return false;
+    }
+
+
+    return true;
+
+  }catch(error){
+
+    console.error(
+      "Erro ao iniciar autenticação:",
+      error
+    );
+
+    alert(
+      "Sua sessão não pôde ser verificada. Faça login novamente."
+    );
+
+    window.location.href =
+      "/login.html";
+
+    return false;
+  }
+}
+
+
+/* =========================================================
+   PEGA O TOKEN ATUAL
+   ========================================================= */
+
+async function getAuthToken(){
+
+  if(
+    !supabaseClient
+  ){
+    throw new Error(
+      "Sessão ainda não foi inicializada."
+    );
+  }
+
+
+  const {
+    data,
+    error
+  } =
+    await supabaseClient.auth.getSession();
+
+
+  if(
+    error ||
+    !data?.session?.access_token
+  ){
+
+    window.location.href =
+      "/login.html";
+
+    throw new Error(
+      "Sua sessão expirou. Faça login novamente."
+    );
+  }
+
+
+  return data.session.access_token;
+}
+
+
+/* =========================================================
+   CABEÇALHO DE AUTORIZAÇÃO
+   ========================================================= */
+
+async function authHeaders(){
+
+  const token =
+    await getAuthToken();
+
+  return {
+    "Authorization":
+      "Bearer " + token
+  };
+}
+
+
+/* =========================================================
+   DADOS DOS VÍDEOS
+   ========================================================= */
+
 const D={
   h:[],
   b:[],
@@ -481,11 +643,22 @@ const D={
 const $=id=>
   document.getElementById(id);
 
-function setup(id,k,list){
+
+/* =========================================================
+   LISTA DE ARQUIVOS
+   ========================================================= */
+
+function setup(
+  id,
+  k,
+  list
+){
 
   $(id).onchange=e=>{
 
-    D[k]=[...e.target.files];
+    D[k]=[
+      ...e.target.files
+    ];
 
     $(list).innerHTML=
       D[k]
@@ -499,15 +672,42 @@ function setup(id,k,list){
   };
 }
 
-function escapeHtml(value){
+
+/* =========================================================
+   ESCAPA HTML
+   ========================================================= */
+
+function escapeHtml(
+  value
+){
 
   return String(value)
-    .replace(/&/g,'&amp;')
-    .replace(/</g,'&lt;')
-    .replace(/>/g,'&gt;')
-    .replace(/"/g,'&quot;')
-    .replace(/'/g,'&#039;');
+    .replace(
+      /&/g,
+      '&amp;'
+    )
+    .replace(
+      /</g,
+      '&lt;'
+    )
+    .replace(
+      />/g,
+      '&gt;'
+    )
+    .replace(
+      /"/g,
+      '&quot;'
+    )
+    .replace(
+      /'/g,
+      '&#039;'
+    );
 }
+
+
+/* =========================================================
+   ATUALIZA CONTADORES
+   ========================================================= */
 
 function update(){
 
@@ -525,28 +725,54 @@ function update(){
       D.h.length *
       D.b.length *
       D.c.length
-    ).toLocaleString('pt-BR');
+    ).toLocaleString(
+      'pt-BR'
+    );
 }
 
-function originalityClass(value){
 
-  if(value>=90){
+/* =========================================================
+   CLASSE DE ORIGINALIDADE
+   ========================================================= */
+
+function originalityClass(
+  value
+){
+
+  if(
+    value >= 90
+  ){
     return 'high';
   }
 
-  if(value>=80){
+  if(
+    value >= 80
+  ){
     return 'medium';
   }
 
   return 'low';
 }
 
-function renderOriginalitySummary(files){
 
-  if(!files.length){
-    $('originalitySummary').innerHTML='';
+/* =========================================================
+   RESUMO DE ORIGINALIDADE
+   ========================================================= */
+
+function renderOriginalitySummary(
+  files
+){
+
+  if(
+    !files.length
+  ){
+
+    $('originalitySummary')
+      .innerHTML='';
+
     return;
   }
+
 
   const counts={
     100:0,
@@ -555,62 +781,127 @@ function renderOriginalitySummary(files){
     70:0
   };
 
-  files.forEach(file=>{
 
-    const value=
-      Number(file.originality);
+  files.forEach(
+    file=>{
 
-    if(
-      Object.prototype.hasOwnProperty
-      .call(counts,value)
-    ){
-      counts[value]++;
+      const value =
+        Number(
+          file.originality
+        );
+
+
+      if(
+        Object.prototype.hasOwnProperty
+          .call(
+            counts,
+            value
+          )
+      ){
+
+        counts[value]++;
+
+      }
+
     }
+  );
 
-  });
 
-  $('originalitySummary').innerHTML=`
-    <div class="originality-summary">
+  $('originalitySummary')
+    .innerHTML=`
 
-      <div class="originality-summary-item">
-        <div class="originality-summary-number">
-          ${counts[100]}
+      <div class="originality-summary">
+
+        <div class="originality-summary-item">
+
+          <div class="originality-summary-number">
+            ${counts[100]}
+          </div>
+
+          <div class="originality-summary-label">
+            100%
+          </div>
+
         </div>
-        <div class="originality-summary-label">
-          100%
+
+
+        <div class="originality-summary-item">
+
+          <div class="originality-summary-number">
+            ${counts[90]}
+          </div>
+
+          <div class="originality-summary-label">
+            90%
+          </div>
+
         </div>
+
+
+        <div class="originality-summary-item">
+
+          <div class="originality-summary-number">
+            ${counts[80]}
+          </div>
+
+          <div class="originality-summary-label">
+            80%
+          </div>
+
+        </div>
+
+
+        <div class="originality-summary-item">
+
+          <div class="originality-summary-number">
+            ${counts[70]}
+          </div>
+
+          <div class="originality-summary-label">
+            70%
+          </div>
+
+        </div>
+
       </div>
 
-      <div class="originality-summary-item">
-        <div class="originality-summary-number">
-          ${counts[90]}
-        </div>
-        <div class="originality-summary-label">
-          90%
-        </div>
-      </div>
-
-      <div class="originality-summary-item">
-        <div class="originality-summary-number">
-          ${counts[80]}
-        </div>
-        <div class="originality-summary-label">
-          80%
-        </div>
-      </div>
-
-      <div class="originality-summary-item">
-        <div class="originality-summary-number">
-          ${counts[70]}
-        </div>
-        <div class="originality-summary-label">
-          70%
-        </div>
-      </div>
-
-    </div>
   `;
 }
+
+
+/* =========================================================
+   URL AUTENTICADA PARA VÍDEOS
+   ========================================================= */
+
+async function createAuthenticatedVideoUrl(
+  jobId,
+  fileName
+){
+
+  const token =
+    await getAuthToken();
+
+
+  return (
+    "/api/jobs/" +
+    encodeURIComponent(
+      jobId
+    ) +
+    "/video/" +
+    encodeURIComponent(
+      fileName
+    ) +
+    "?token=" +
+    encodeURIComponent(
+      token
+    )
+  );
+}
+
+
+/* =========================================================
+   CONFIGURA OS SELETORES
+   ========================================================= */
 
 setup(
   'hooks',
@@ -630,141 +921,237 @@ setup(
   'cl'
 );
 
-$('go').onclick=async()=>{
 
-  if(
-    !D.h.length ||
-    !D.b.length ||
-    !D.c.length
-  ){
-    alert(
-      'Selecione pelo menos 1 vídeo em cada categoria.'
-    );
+/* =========================================================
+   BOTÃO GERAR
+   ========================================================= */
 
-    return;
-  }
+$('go').onclick =
+  async () => {
 
-  const fd=
-    new FormData();
+    if(
+      !D.h.length ||
+      !D.b.length ||
+      !D.c.length
+    ){
 
-  D.h.forEach(
-    f=>
-      fd.append(
-        'hooks',
-        f
-      )
-  );
-
-  D.b.forEach(
-    f=>
-      fd.append(
-        'bodies',
-        f
-      )
-  );
-
-  D.c.forEach(
-    f=>
-      fd.append(
-        'ctas',
-        f
-      )
-  );
-
-  $('go').disabled=true;
-
-  $('download').style.display=
-    'none';
-
-  $('result').innerHTML='';
-
-  $('originalitySummary').innerHTML='';
-
-  $('bar').style.width=
-    '0%';
-
-  $('status').textContent=
-    'Enviando vídeos…';
-
-  try{
-
-    const r=
-      await fetch(
-        '/api/jobs',
-        {
-          method:'POST',
-          body:fd
-        }
+      alert(
+        'Selecione pelo menos 1 vídeo em cada categoria.'
       );
 
-    const j=
-      await r.json();
-
-    if(!r.ok){
-
-      throw Error(
-        j.error ||
-        'Falha no envio'
-      );
+      return;
     }
 
-    const poll=async()=>{
 
-      const response=
+    const fd =
+      new FormData();
+
+
+    D.h.forEach(
+      f =>
+        fd.append(
+          'hooks',
+          f
+        )
+    );
+
+
+    D.b.forEach(
+      f =>
+        fd.append(
+          'bodies',
+          f
+        )
+    );
+
+
+    D.c.forEach(
+      f =>
+        fd.append(
+          'ctas',
+          f
+        )
+    );
+
+
+    $('go').disabled =
+      true;
+
+
+    $('download')
+      .style.display =
+      'none';
+
+
+    $('result')
+      .innerHTML='';
+
+
+    $('originalitySummary')
+      .innerHTML='';
+
+
+    $('bar')
+      .style.width =
+      '0%';
+
+
+    $('status')
+      .textContent =
+      'Enviando vídeos…';
+
+
+    try{
+
+      const headers =
+        await authHeaders();
+
+
+      const r =
         await fetch(
-          '/api/jobs/' +
-          encodeURIComponent(j.id)
+          '/api/jobs',
+          {
+            method:
+              'POST',
+
+            headers,
+
+            body:
+              fd
+          }
         );
 
-      const x=
-        await response.json();
 
-      if(!response.ok){
+      const j =
+        await r.json();
+
+
+      if(
+        !r.ok
+      ){
+
+        if(
+          r.status === 401
+        ){
+
+          window.location.href =
+            "/login.html";
+
+          return;
+        }
+
 
         throw Error(
-          x.error ||
-          'Falha ao consultar processamento'
+          j.error ||
+          'Falha no envio'
         );
+
       }
 
-      const pct=
-        x.total
-        ? Math.round(
-            x.done /
-            x.total *
-            100
-          )
-        : 0;
 
-      $('bar').style.width=
-        pct + '%';
+      const poll =
+        async () => {
 
-      $('status').textContent=
-        x.current ||
-        'Processando…';
+          const headers =
+            await authHeaders();
 
-      if(x.files?.length){
 
-        renderOriginalitySummary(
-          x.files
-        );
+          const response =
+            await fetch(
 
-        $('result').innerHTML=
-          x.files
-            .map(f=>{
+              '/api/jobs/' +
+              encodeURIComponent(
+                j.id
+              ),
 
-              const videoUrl=
-                '/api/jobs/' +
-                encodeURIComponent(j.id) +
-                '/video/' +
-                encodeURIComponent(f.name);
+              {
+                headers
+              }
 
-              const originality=
+            );
+
+
+          const x =
+            await response.json();
+
+
+          if(
+            !response.ok
+          ){
+
+            if(
+              response.status === 401
+            ){
+
+              window.location.href =
+                "/login.html";
+
+              return;
+            }
+
+
+            throw Error(
+              x.error ||
+              'Falha ao consultar processamento'
+            );
+
+          }
+
+
+          const pct =
+            x.total
+              ? Math.round(
+                  x.done /
+                  x.total *
+                  100
+                )
+              : 0;
+
+
+          $('bar')
+            .style.width =
+            pct + '%';
+
+
+          $('status')
+            .textContent =
+            x.current ||
+            'Processando…';
+
+
+          if(
+            x.files?.length
+          ){
+
+            renderOriginalitySummary(
+              x.files
+            );
+
+
+            const videoItems =
+              [];
+
+
+            for(
+              const f
+              of x.files
+            ){
+
+              const videoUrl =
+                await createAuthenticatedVideoUrl(
+                  j.id,
+                  f.name
+                );
+
+
+              const originality =
                 Number(
                   f.originality
                 );
 
-              return `
+
+              videoItems.push(`
+
                 <div class="combo">
 
                   <b>
@@ -772,11 +1159,15 @@ $('go').onclick=async()=>{
                   </b>
 
                   <div class="originality ${originalityClass(originality)}">
+
                     <small>
                       Originalidade estrutural
                     </small>
+
                     ${originality}%
+
                   </div>
+
 
                   <video
                     class="preview"
@@ -785,95 +1176,184 @@ $('go').onclick=async()=>{
                     preload="metadata"
                     src="${videoUrl}"
                   >
+
                     Seu navegador não consegue reproduzir este vídeo.
+
                   </video>
 
+
                   <span class="pill">
+
                     Gancho:
                     ${escapeHtml(f.hook)}
+
                   </span>
 
+
                   <span class="pill">
+
                     Corpo:
                     ${escapeHtml(f.body)}
+
                   </span>
 
+
                   <span class="pill">
+
                     CTA:
                     ${escapeHtml(f.cta)}
+
                   </span>
+
 
                   <br>
 
+
                   <span style="color:#aaa">
+
                     Combinação única #${f.index}
+
                   </span>
+
 
                   <a
                     class="single-download"
                     href="${videoUrl}"
                     download="${escapeHtml(f.name)}"
                   >
+
                     ⬇ Baixar este vídeo
+
                   </a>
 
                 </div>
-              `;
 
-            })
-            .join('');
-      }
+              `);
 
-      if(x.status==='done'){
+            }
 
-        $('bar').style.width=
-          '100%';
 
-        $('download').href=
-          x.zip;
+            $('result')
+              .innerHTML =
+              videoItems.join('');
+          }
 
-        $('download').style.display=
-          'block';
 
-        $('status').textContent=
-          `Concluído: ${x.total} vídeos.`;
+          if(
+            x.status ===
+            'done'
+          ){
 
-        $('go').disabled=
-          false;
+            $('bar')
+              .style.width =
+              '100%';
 
-        return;
-      }
 
-      if(x.status==='error'){
+            const token =
+              await getAuthToken();
 
-        throw Error(
-          x.error ||
-          'Processamento falhou'
-        );
-      }
 
-      setTimeout(
-        poll,
-        1000
+            $('download')
+              .href =
+              x.zip +
+              '?token=' +
+              encodeURIComponent(
+                token
+              );
+
+
+            $('download')
+              .style.display =
+              'block';
+
+
+            $('status')
+              .textContent =
+              `Concluído: ${x.total} vídeos.`;
+
+
+            $('go')
+              .disabled =
+              false;
+
+
+            return;
+          }
+
+
+          if(
+            x.status ===
+            'error'
+          ){
+
+            throw Error(
+              x.error ||
+              'Processamento falhou'
+            );
+
+          }
+
+
+          setTimeout(
+            poll,
+            1000
+          );
+
+        };
+
+
+      poll();
+
+
+    }catch(e){
+
+      console.error(
+        e
       );
-    };
 
-    poll();
 
-  }catch(e){
+      $('status')
+        .textContent =
+        'Erro: ' +
+        e.message;
 
-    $('status').textContent=
-      'Erro: ' +
-      e.message;
 
-    alert(
-      e.message
-    );
+      alert(
+        e.message
+      );
 
-    $('go').disabled=
-      false;
+
+      $('go')
+        .disabled =
+        false;
+
+    }
+
+  };
+
+
+/* =========================================================
+   INICIA AUTENTICAÇÃO
+   ========================================================= */
+
+(async()=>{
+
+  const authenticated =
+    await initializeAuth();
+
+
+  if(
+    authenticated
+  ){
+
+    $('status')
+      .textContent =
+      'Pronto.';
+
   }
-};
+
+})();
+
 </script>
 
 </body>
