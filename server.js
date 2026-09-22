@@ -1423,10 +1423,214 @@ app.get(
           file
         );
 
-      res.download(
-        tempVideo,
-        name,
+      const stat =
+        await fsp.stat(
+          tempVideo
+        );
+
+      const size =
+        stat.size;
+
+      const range =
+        req.headers.range;
+
+      res.setHeader(
+        "Content-Type",
+        "video/mp4"
+      );
+
+      res.setHeader(
+        "Accept-Ranges",
+        "bytes"
+      );
+
+      res.setHeader(
+        "Cache-Control",
+        "no-store"
+      );
+
+      if (!range) {
+
+        res.setHeader(
+          "Content-Length",
+          size
+        );
+
+        res.setHeader(
+          "Content-Disposition",
+          `inline; filename="${name}"`
+        );
+
+        const stream =
+          fs.createReadStream(
+            tempVideo
+          );
+
+        stream.on(
+          "close",
+          () => {
+            fsp.rm(
+              tempVideo,
+              {
+                force: true
+              }
+            ).catch(() => {});
+          }
+        );
+
+        stream.on(
+          "error",
+          error => {
+            console.error(
+              "Erro enviando vídeo:",
+              error
+            );
+
+            fsp.rm(
+              tempVideo,
+              {
+                force: true
+              }
+            ).catch(() => {});
+
+            if (!res.headersSent) {
+              res.sendStatus(500);
+            } else {
+              res.destroy(error);
+            }
+          }
+        );
+
+        return stream.pipe(res);
+      }
+
+
+      const matches =
+        range.match(
+          /bytes=(\d*)-(\d*)/
+        );
+
+      if (!matches) {
+
+        await fsp.rm(
+          tempVideo,
+          {
+            force: true
+          }
+        );
+
+        return res
+          .status(416)
+          .set(
+            "Content-Range",
+            `bytes */${size}`
+          )
+          .end();
+      }
+
+      let start =
+        matches[1]
+          ? Number(matches[1])
+          : 0;
+
+      let end =
+        matches[2]
+          ? Number(matches[2])
+          : size - 1;
+
+      if (
+        !matches[1] &&
+        matches[2]
+      ) {
+        const suffixLength =
+          Number(matches[2]);
+
+        start =
+          Math.max(
+            0,
+            size - suffixLength
+          );
+
+        end =
+          size - 1;
+      }
+
+      if (
+        start < 0 ||
+        start >= size ||
+        end < start
+      ) {
+
+        await fsp.rm(
+          tempVideo,
+          {
+            force: true
+          }
+        );
+
+        return res
+          .status(416)
+          .set(
+            "Content-Range",
+            `bytes */${size}`
+          )
+          .end();
+      }
+
+      end =
+        Math.min(
+          end,
+          size - 1
+        );
+
+      const chunkSize =
+        end - start + 1;
+
+      res.statusCode = 206;
+
+      res.setHeader(
+        "Content-Range",
+        `bytes ${start}-${end}/${size}`
+      );
+
+      res.setHeader(
+        "Content-Length",
+        chunkSize
+      );
+
+      res.setHeader(
+        "Content-Disposition",
+        `inline; filename="${name}"`
+      );
+
+      const stream =
+        fs.createReadStream(
+          tempVideo,
+          {
+            start,
+            end
+          }
+        );
+
+      stream.on(
+        "close",
+        () => {
+          fsp.rm(
+            tempVideo,
+            {
+              force: true
+            }
+          ).catch(() => {});
+        }
+      );
+
+      stream.on(
+        "error",
         error => {
+          console.error(
+            "Erro enviando trecho do vídeo:",
+            error
+          );
 
           fsp.rm(
             tempVideo,
@@ -1435,15 +1639,15 @@ app.get(
             }
           ).catch(() => {});
 
-          if (error) {
-            console.error(
-              "Erro enviando vídeo:",
-              error
-            );
+          if (!res.headersSent) {
+            res.sendStatus(500);
+          } else {
+            res.destroy(error);
           }
-
         }
       );
+
+      stream.pipe(res);
 
     } catch (error) {
 
