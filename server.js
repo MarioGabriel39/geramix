@@ -8,7 +8,6 @@ import crypto from "crypto";
 import { spawn } from "child_process";
 import archiver from "archiver";
 import ffmpegPath from "ffmpeg-static";
-import { createClient } from "@supabase/supabase-js";
 
 const app = express();
 
@@ -37,18 +36,6 @@ if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
   );
 }
 
-const supabase = createClient(
-  SUPABASE_URL,
-  SUPABASE_ANON_KEY,
-  {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false,
-      detectSessionInUrl: false
-    }
-  }
-);
-
 
 /* =========================================================
    DIRETÓRIOS
@@ -72,7 +59,6 @@ app.use(express.static(PUBLIC));
    ========================================================= */
 
 app.get("/api/config", (_, res) => {
-
   res.setHeader(
     "Cache-Control",
     "no-store"
@@ -82,7 +68,6 @@ app.get("/api/config", (_, res) => {
     supabaseUrl: SUPABASE_URL,
     supabaseAnonKey: SUPABASE_ANON_KEY
   });
-
 });
 
 
@@ -91,9 +76,7 @@ app.get("/api/config", (_, res) => {
    ========================================================= */
 
 async function requireAuth(req, res, next) {
-
   try {
-
     const authorization =
       String(
         req.headers.authorization || ""
@@ -106,28 +89,23 @@ async function requireAuth(req, res, next) {
         .toLowerCase()
         .startsWith("bearer ")
     ) {
-
       token =
         authorization
           .slice(7)
           .trim();
-
     }
 
     /*
      * Vídeos e ZIP usam token pela URL.
      */
     if (!token) {
-
       token =
         String(
           req.query.token || ""
         ).trim();
-
     }
 
     if (!token) {
-
       console.error(
         "GeraMix: nenhuma sessão foi enviada."
       );
@@ -136,15 +114,12 @@ async function requireAuth(req, res, next) {
         error:
           "Sessão não enviada."
       });
-
     }
 
     /*
-     * A Publishable Key começa com sb_.
-     * Ela NÃO pode ser usada como token do usuário.
+     * Publishable Key não é token de usuário.
      */
     if (token.startsWith("sb_")) {
-
       console.error(
         "GeraMix: Publishable Key recebida no lugar do token do usuário."
       );
@@ -153,11 +128,10 @@ async function requireAuth(req, res, next) {
         error:
           "Token de usuário inválido."
       });
-
     }
 
     /*
-     * Validação direta da sessão no Supabase.
+     * Valida diretamente a sessão no Supabase.
      */
     const response =
       await fetch(
@@ -175,11 +149,9 @@ async function requireAuth(req, res, next) {
       );
 
     if (!response.ok) {
-
       let details = "";
 
       try {
-
         const data =
           await response.json();
 
@@ -189,11 +161,8 @@ async function requireAuth(req, res, next) {
           data?.error_description ||
           data?.error ||
           "";
-
       } catch {
-
         details = "";
-
       }
 
       console.error(
@@ -206,7 +175,6 @@ async function requireAuth(req, res, next) {
         error:
           "Sessão inválida ou expirada."
       });
-
     }
 
     const user =
@@ -216,7 +184,6 @@ async function requireAuth(req, res, next) {
       !user ||
       !user.id
     ) {
-
       console.error(
         "GeraMix: Supabase respondeu sem usuário."
       );
@@ -225,16 +192,13 @@ async function requireAuth(req, res, next) {
         error:
           "Sessão inválida ou expirada."
       });
-
     }
 
-    req.user =
-      user;
+    req.user = user;
 
     next();
 
   } catch (error) {
-
     console.error(
       "Erro ao validar sessão:",
       error
@@ -244,9 +208,7 @@ async function requireAuth(req, res, next) {
       error:
         "Não foi possível validar sua sessão."
     });
-
   }
-
 }
 
 
@@ -255,13 +217,11 @@ async function requireAuth(req, res, next) {
    ========================================================= */
 
 app.get("/health", (_, res) => {
-
   res.json({
     ok: true,
     service: "geramix",
     ffmpeg: Boolean(ffmpegPath)
   });
-
 });
 
 
@@ -269,16 +229,14 @@ app.get("/health", (_, res) => {
    CONFIGURAÇÕES
    ========================================================= */
 
-const FFMPEG_CONCURRENCY =
-  Math.max(
-    1,
-    Math.min(
-      3,
-      Number(
-        process.env.FFMPEG_CONCURRENCY || 2
-      )
-    )
-  );
+/*
+ * IMPORTANTE:
+ * Render Free tem limite de aproximadamente 512 MB.
+ *
+ * Usamos apenas 1 FFmpeg por vez para reduzir
+ * drasticamente o pico de memória.
+ */
+const FFMPEG_CONCURRENCY = 1;
 
 const MAX_COMBINATIONS = 1000;
 
@@ -288,7 +246,6 @@ const MAX_COMBINATIONS = 1000;
    ========================================================= */
 
 function runFFmpeg(args, cwd) {
-
   return new Promise(
     (resolve, reject) => {
 
@@ -299,9 +256,18 @@ function runFFmpeg(args, cwd) {
             "-hide_banner",
             "-loglevel",
             "error",
+
+            /*
+             * Reduz uso de memória e CPU.
+             */
+            "-threads",
+            "1",
+
             ...args
           ],
-          { cwd }
+          {
+            cwd
+          }
         );
 
       let err = "";
@@ -310,6 +276,15 @@ function runFFmpeg(args, cwd) {
         "data",
         data => {
           err += data.toString();
+
+          /*
+           * Evita acumular uma saída enorme
+           * em memória caso o FFmpeg produza
+           * muitas mensagens.
+           */
+          if (err.length > 10000) {
+            err = err.slice(-10000);
+          }
         }
       );
 
@@ -323,18 +298,14 @@ function runFFmpeg(args, cwd) {
         code => {
 
           if (code === 0) {
-
             resolve();
-
           } else {
-
             reject(
               new Error(
                 err.trim() ||
                 `FFmpeg saiu com código ${code}`
               )
             );
-
           }
 
         }
@@ -342,7 +313,6 @@ function runFFmpeg(args, cwd) {
 
     }
   );
-
 }
 
 
@@ -351,7 +321,6 @@ function runFFmpeg(args, cwd) {
    ========================================================= */
 
 async function hasAudio(input, cwd) {
-
   try {
 
     await runFFmpeg(
@@ -372,11 +341,8 @@ async function hasAudio(input, cwd) {
     return true;
 
   } catch {
-
     return false;
-
   }
-
 }
 
 
@@ -385,7 +351,6 @@ async function hasAudio(input, cwd) {
    ========================================================= */
 
 function safeName(name) {
-
   return String(
     name || "video"
   )
@@ -394,7 +359,6 @@ function safeName(name) {
       "_"
     )
     .slice(-100);
-
 }
 
 
@@ -406,7 +370,6 @@ function calculateOriginality(
   current,
   previous
 ) {
-
   if (!previous) {
     return 100;
   }
@@ -435,7 +398,6 @@ function calculateOriginality(
   }
 
   return 70 + different * 10;
-
 }
 
 
@@ -490,13 +452,11 @@ async function concat3(
   const silentIndexes = [];
 
   for (
-    let i = 0;
-    i < inputs.length;
-    i++
+    const input
+    of inputs
   ) {
 
-    if (!audioFlags[i]) {
-
+    if (!audioFlags[inputs.indexOf(input)]) {
       const silentIndex =
         inputs.length +
         silentIndexes.length;
@@ -513,7 +473,6 @@ async function concat3(
         "-i",
         "anullsrc=r=48000:cl=stereo"
       );
-
     }
 
   }
@@ -570,7 +529,6 @@ async function concat3(
       );
 
       silentCounter++;
-
     }
 
   }
@@ -597,30 +555,43 @@ async function concat3(
   args.push(
     "-filter_complex",
     filterParts.join(";"),
+
     "-map",
     "[vout]",
+
     "-map",
     "[aout]",
+
     "-c:v",
     "libx264",
+
     "-preset",
     "veryfast",
+
     "-crf",
     "23",
+
     "-pix_fmt",
     "yuv420p",
+
     "-r",
     "30",
+
     "-c:a",
     "aac",
+
     "-ar",
     "48000",
+
     "-ac",
     "2",
+
     "-b:a",
     "128k",
+
     "-movflags",
     "+faststart",
+
     "-y",
     output
   );
@@ -629,7 +600,6 @@ async function concat3(
     args,
     cwd
   );
-
 }
 
 
@@ -669,12 +639,10 @@ async function runPool(
       completed++;
 
       if (onProgress) {
-
         onProgress(
           completed,
           items.length
         );
-
       }
 
     }
@@ -704,7 +672,6 @@ async function runPool(
   await Promise.all(
     workers
   );
-
 }
 
 
@@ -866,6 +833,7 @@ app.post(
 
         await runPool(
           combinations,
+
           async (
             {
               hook,
@@ -928,6 +896,7 @@ app.post(
               job.files.length;
 
           },
+
           FFMPEG_CONCURRENCY
         );
 
@@ -1183,18 +1152,14 @@ app.get(
       );
 
     if (!job) {
-
       return res.sendStatus(404);
-
     }
 
     if (
       job.userId !==
       req.user.id
     ) {
-
       return res.sendStatus(404);
-
     }
 
     const name =
@@ -1208,9 +1173,7 @@ app.get(
           file.name === name
       )
     ) {
-
       return res.sendStatus(404);
-
     }
 
     res.download(
@@ -1272,7 +1235,6 @@ app.use(
     }
 
     next();
-
   }
 );
 
