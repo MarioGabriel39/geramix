@@ -240,11 +240,12 @@ function runFFmpeg(args, cwd) {
             "error",
 
             /*
-             * Mantemos apenas 1 thread
-             * para controlar o consumo de memória.
+             * ALTERAÇÃO DE VELOCIDADE:
+             * continua sendo apenas 1 FFmpeg por vez,
+             * mas agora ele pode usar 2 threads.
              */
             "-threads",
-            "1",
+            "2",
 
             ...args
           ],
@@ -479,7 +480,7 @@ async function concatNormalized(
         "copy",
 
         /*
-         * ALTERAÇÃO DE VELOCIDADE:
+         * ALTERAÇÃO ANTERIOR:
          *
          * Removido:
          * -movflags +faststart
