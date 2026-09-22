@@ -115,10 +115,8 @@ async function requireAuth(req, res, next) {
     }
 
     /*
-     * Mantemos token pela URL somente para
-     * compatibilidade com os links de vídeo e ZIP.
+     * Vídeos e ZIP usam token pela URL.
      */
-
     if (!token) {
 
       token =
@@ -130,48 +128,78 @@ async function requireAuth(req, res, next) {
 
     if (!token) {
 
+      console.error(
+        "GeraMix: nenhuma sessão foi enviada."
+      );
+
       return res.status(401).json({
-        error: "Não autenticado."
+        error:
+          "Sessão não enviada."
       });
 
     }
 
     /*
-     * Publishable Key não é access token.
+     * A Publishable Key começa com sb_.
+     * Ela NÃO pode ser usada como token do usuário.
      */
-
     if (token.startsWith("sb_")) {
 
       console.error(
-        "GeraMix: chave Supabase recebida no lugar do access token."
+        "GeraMix: Publishable Key recebida no lugar do token do usuário."
       );
 
       return res.status(401).json({
         error:
-          "Sessão inválida ou expirada."
+          "Token de usuário inválido."
       });
 
     }
 
     /*
-     * Validação real do usuário no Supabase.
+     * Validação direta da sessão no Supabase.
      */
+    const response =
+      await fetch(
+        `${SUPABASE_URL}/auth/v1/user`,
+        {
+          method: "GET",
+          headers: {
+            "Authorization":
+              `Bearer ${token}`,
 
-    const {
-      data,
-      error
-    } =
-      await supabase.auth.getUser(token);
+            "apikey":
+              SUPABASE_ANON_KEY
+          }
+        }
+      );
 
-    if (
-      error ||
-      !data?.user
-    ) {
+    if (!response.ok) {
+
+      let details = "";
+
+      try {
+
+        const data =
+          await response.json();
+
+        details =
+          data?.msg ||
+          data?.message ||
+          data?.error_description ||
+          data?.error ||
+          "";
+
+      } catch {
+
+        details = "";
+
+      }
 
       console.error(
-        "GeraMix: token rejeitado:",
-        error?.message ||
-        "usuário não encontrado"
+        "GeraMix: Supabase recusou o token.",
+        response.status,
+        details
       );
 
       return res.status(401).json({
@@ -181,14 +209,34 @@ async function requireAuth(req, res, next) {
 
     }
 
-    req.user = data.user;
+    const user =
+      await response.json();
+
+    if (
+      !user ||
+      !user.id
+    ) {
+
+      console.error(
+        "GeraMix: Supabase respondeu sem usuário."
+      );
+
+      return res.status(401).json({
+        error:
+          "Sessão inválida ou expirada."
+      });
+
+    }
+
+    req.user =
+      user;
 
     next();
 
   } catch (error) {
 
     console.error(
-      "Erro na autenticação:",
+      "Erro ao validar sessão:",
       error
     );
 
