@@ -563,10 +563,6 @@ async function initializeAuth(){
       );
 
 
-    /*
-       Primeiro verifica a sessão existente.
-    */
-
     let result =
       await supabaseClient.auth.getSession();
 
@@ -583,10 +579,6 @@ async function initializeAuth(){
     let session =
       result.data?.session;
 
-
-    /*
-       Se não existir sessão, tenta renovar.
-    */
 
     if(
       !session
@@ -725,10 +717,6 @@ async function getAuthToken(
   }
 
 
-  /*
-     Quando solicitado, força uma renovação.
-  */
-
   if(
     forceRefresh
   ){
@@ -817,10 +805,8 @@ async function getAuthToken(
 
 
   /*
-     Verifica a validade do JWT.
-
-     Se estiver a menos de 60 segundos
-     de expirar, renova antes de enviar.
+     Se o token estiver a menos de 60 segundos
+     de expirar, renova automaticamente.
   */
 
   if(
@@ -1314,18 +1300,20 @@ $("go").onclick =
     try{
 
       /*
-         IMPORTANTE:
+         Aqui está a correção principal.
 
-         Antes de começar uma geração,
-         força uma renovação do token.
+         Antes estava:
+         authHeaders(true)
 
-         Isso evita enviar para o servidor
-         um access token velho.
+         Agora usamos a sessão atual.
+         A renovação só acontece automaticamente
+         quando o token realmente estiver próximo
+         de expirar.
       */
 
       let headers =
         await authHeaders(
-          true
+          false
         );
 
 
@@ -1346,8 +1334,8 @@ $("go").onclick =
 
 
       /*
-         Se ainda houver 401,
-         força outra renovação e tenta novamente.
+         Se o servidor responder 401,
+         tenta renovar a sessão e repete uma vez.
       */
 
       if(
