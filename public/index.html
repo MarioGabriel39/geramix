@@ -502,8 +502,12 @@ async function initializeAuth(){
 
     const configResponse =
       await fetch(
-        "/api/config"
+        "/api/config",
+        {
+          cache:"no-store"
+        }
       );
+
 
     if(
       !configResponse.ok
@@ -512,6 +516,7 @@ async function initializeAuth(){
         "Não foi possível carregar a configuração."
       );
     }
+
 
     const config =
       await configResponse.json();
@@ -534,16 +539,49 @@ async function initializeAuth(){
       );
 
 
-    const {
-      data,
-      error
-    } =
+    let sessionResult =
       await supabaseClient.auth.getSession();
 
 
     if(
-      error ||
-      !data?.session
+      sessionResult.error
+    ){
+      throw sessionResult.error;
+    }
+
+
+    let session =
+      sessionResult.data?.session;
+
+
+    /*
+       Se não houver sessão, tenta renovar uma vez.
+       Isso evita expulsar o usuário por uma falha
+       momentânea de atualização do token.
+    */
+
+    if(
+      !session
+    ){
+
+      const refreshResult =
+        await supabaseClient.auth.refreshSession();
+
+
+      if(
+        !refreshResult.error
+      ){
+
+        session =
+          refreshResult.data?.session;
+
+      }
+
+    }
+
+
+    if(
+      !session
     ){
 
       window.location.href =
@@ -562,12 +600,15 @@ async function initializeAuth(){
       error
     );
 
+
     alert(
       "Sua sessão não pôde ser verificada. Faça login novamente."
     );
 
+
     window.location.href =
       "/login.html";
+
 
     return false;
   }
@@ -583,34 +624,70 @@ async function getAuthToken(){
   if(
     !supabaseClient
   ){
+
     throw new Error(
       "Sessão ainda não foi inicializada."
     );
+
   }
 
 
-  const {
-    data,
-    error
-  } =
+  let result =
     await supabaseClient.auth.getSession();
 
 
   if(
-    error ||
-    !data?.session?.access_token
+    result.error
   ){
 
-    window.location.href =
-      "/login.html";
+    throw result.error;
+
+  }
+
+
+  let session =
+    result.data?.session;
+
+
+  /*
+     Se não houver sessão, tenta renovar.
+  */
+
+  if(
+    !session
+  ){
+
+    const refreshResult =
+      await supabaseClient.auth.refreshSession();
+
+
+    if(
+      refreshResult.error
+    ){
+
+      throw refreshResult.error;
+
+    }
+
+
+    session =
+      refreshResult.data?.session;
+
+  }
+
+
+  if(
+    !session?.access_token
+  ){
 
     throw new Error(
       "Sua sessão expirou. Faça login novamente."
     );
+
   }
 
 
-  return data.session.access_token;
+  return session.access_token;
 }
 
 
@@ -623,10 +700,60 @@ async function authHeaders(){
   const token =
     await getAuthToken();
 
+
   return {
     "Authorization":
       "Bearer " + token
   };
+
+}
+
+
+/* =========================================================
+   TENTA RENOVAR A SESSÃO
+   ========================================================= */
+
+async function refreshAuthSession(){
+
+  if(
+    !supabaseClient
+  ){
+
+    return false;
+
+  }
+
+
+  try{
+
+    const result =
+      await supabaseClient.auth.refreshSession();
+
+
+    if(
+      result.error ||
+      !result.data?.session
+    ){
+
+      return false;
+
+    }
+
+
+    return true;
+
+  }catch(error){
+
+    console.error(
+      "Erro ao renovar sessão:",
+      error
+    );
+
+
+    return false;
+
+  }
+
 }
 
 
@@ -660,6 +787,7 @@ function setup(
       ...e.target.files
     ];
 
+
     $(list).innerHTML=
       D[k]
         .map(
@@ -668,8 +796,11 @@ function setup(
         )
         .join('');
 
+
     update();
+
   };
+
 }
 
 
@@ -702,6 +833,7 @@ function escapeHtml(
       /'/g,
       '&#039;'
     );
+
 }
 
 
@@ -714,11 +846,14 @@ function update(){
   $('hn').textContent=
     D.h.length;
 
+
   $('bn').textContent=
     D.b.length;
 
+
   $('cn').textContent=
     D.c.length;
+
 
   $('total').textContent=
     (
@@ -728,6 +863,7 @@ function update(){
     ).toLocaleString(
       'pt-BR'
     );
+
 }
 
 
@@ -742,16 +878,23 @@ function originalityClass(
   if(
     value >= 90
   ){
+
     return 'high';
+
   }
+
 
   if(
     value >= 80
   ){
+
     return 'medium';
+
   }
 
+
   return 'low';
+
 }
 
 
@@ -770,7 +913,9 @@ function renderOriginalitySummary(
     $('originalitySummary')
       .innerHTML='';
 
+
     return;
+
   }
 
 
@@ -866,6 +1011,7 @@ function renderOriginalitySummary(
       </div>
 
   `;
+
 }
 
 
@@ -896,6 +1042,7 @@ async function createAuthenticatedVideoUrl(
       token
     )
   );
+
 }
 
 
@@ -939,7 +1086,9 @@ $('go').onclick =
         'Selecione pelo menos 1 vídeo em cada categoria.'
       );
 
+
       return;
+
     }
 
 
@@ -1003,11 +1152,11 @@ $('go').onclick =
 
     try{
 
-      const headers =
+      let headers =
         await authHeaders();
 
 
-      const r =
+      let r =
         await fetch(
           '/api/jobs',
           {
@@ -1022,6 +1171,47 @@ $('go').onclick =
         );
 
 
+      /*
+         Se o servidor responder 401,
+         tenta renovar a sessão e repete
+         o envio uma única vez.
+      */
+
+      if(
+        r.status === 401
+      ){
+
+        const refreshed =
+          await refreshAuthSession();
+
+
+        if(
+          refreshed
+        ){
+
+          headers =
+            await authHeaders();
+
+
+          r =
+            await fetch(
+              '/api/jobs',
+              {
+                method:
+                  'POST',
+
+                headers,
+
+                body:
+                  fd
+              }
+            );
+
+        }
+
+      }
+
+
       const j =
         await r.json();
 
@@ -1030,20 +1220,9 @@ $('go').onclick =
         !r.ok
       ){
 
-        if(
-          r.status === 401
-        ){
-
-          window.location.href =
-            "/login.html";
-
-          return;
-        }
-
-
         throw Error(
           j.error ||
-          'Falha no envio'
+          `Falha no envio. Código: ${r.status}`
         );
 
       }
@@ -1052,11 +1231,11 @@ $('go').onclick =
       const poll =
         async () => {
 
-          const headers =
+          let headers =
             await authHeaders();
 
 
-          const response =
+          let response =
             await fetch(
 
               '/api/jobs/' +
@@ -1071,6 +1250,47 @@ $('go').onclick =
             );
 
 
+          /*
+             Se o token tiver expirado
+             durante o processamento,
+             tenta renovar uma vez.
+          */
+
+          if(
+            response.status === 401
+          ){
+
+            const refreshed =
+              await refreshAuthSession();
+
+
+            if(
+              refreshed
+            ){
+
+              headers =
+                await authHeaders();
+
+
+              response =
+                await fetch(
+
+                  '/api/jobs/' +
+                  encodeURIComponent(
+                    j.id
+                  ),
+
+                  {
+                    headers
+                  }
+
+                );
+
+            }
+
+          }
+
+
           const x =
             await response.json();
 
@@ -1079,20 +1299,9 @@ $('go').onclick =
             !response.ok
           ){
 
-            if(
-              response.status === 401
-            ){
-
-              window.location.href =
-                "/login.html";
-
-              return;
-            }
-
-
             throw Error(
               x.error ||
-              'Falha ao consultar processamento'
+              `Falha ao consultar processamento. Código: ${response.status}`
             );
 
           }
@@ -1236,6 +1445,7 @@ $('go').onclick =
             $('result')
               .innerHTML =
               videoItems.join('');
+
           }
 
 
@@ -1278,6 +1488,7 @@ $('go').onclick =
 
 
             return;
+
           }
 
 
