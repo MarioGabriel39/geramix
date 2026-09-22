@@ -347,6 +347,7 @@ button:disabled{
 </head>
 
 <body>
+
 <main>
 
 <div class="logo">GeraMix</div>
@@ -356,6 +357,7 @@ button:disabled{
 </div>
 
 <section class="card">
+
   <h2>1. Ganchos</h2>
 
   <div class="muted">
@@ -374,9 +376,12 @@ button:disabled{
   >
 
   <div id="hl" class="files"></div>
+
 </section>
 
+
 <section class="card">
+
   <h2>2. Corpos</h2>
 
   <div class="muted">
@@ -395,9 +400,12 @@ button:disabled{
   >
 
   <div id="bl" class="files"></div>
+
 </section>
 
+
 <section class="card">
+
   <h2>3. CTAs</h2>
 
   <div class="muted">
@@ -416,7 +424,9 @@ button:disabled{
   >
 
   <div id="cl" class="files"></div>
+
 </section>
+
 
 <section class="card">
 
@@ -441,21 +451,26 @@ button:disabled{
 
   </div>
 
+
   <div style="text-align:center;margin-top:10px">
     Total: <b id="total">0</b> vídeos
   </div>
+
 
   <button id="go">
     Gerar vídeos MP4
   </button>
 
+
   <div class="progress">
     <div id="bar" class="bar"></div>
   </div>
 
+
   <div id="status" class="status">
     Verificando sessão…
   </div>
+
 
   <a
     id="download"
@@ -466,9 +481,12 @@ button:disabled{
     ⬇ Baixar todos em ZIP
   </a>
 
+
   <div id="originalitySummary"></div>
 
+
   <div id="result" class="result"></div>
+
 
   <div class="note">
     O índice de originalidade mostra a variação estrutural
@@ -481,7 +499,9 @@ button:disabled{
 
 </main>
 
+
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
 
 <script>
 
@@ -493,7 +513,7 @@ let supabaseClient = null;
 
 
 /* =========================================================
-   CONFIGURAÇÃO E SESSÃO
+   CONFIGURAÇÃO
    ========================================================= */
 
 async function initializeAuth(){
@@ -512,9 +532,11 @@ async function initializeAuth(){
     if(
       !configResponse.ok
     ){
+
       throw new Error(
         "Não foi possível carregar a configuração."
       );
+
     }
 
 
@@ -526,9 +548,11 @@ async function initializeAuth(){
       !config.supabaseUrl ||
       !config.supabaseAnonKey
     ){
+
       throw new Error(
         "Configuração do Supabase incompleta."
       );
+
     }
 
 
@@ -539,43 +563,53 @@ async function initializeAuth(){
       );
 
 
-    let sessionResult =
+    /*
+       Primeiro verifica a sessão existente.
+    */
+
+    let result =
       await supabaseClient.auth.getSession();
 
 
     if(
-      sessionResult.error
+      result.error
     ){
-      throw sessionResult.error;
+
+      throw result.error;
+
     }
 
 
     let session =
-      sessionResult.data?.session;
+      result.data?.session;
 
 
     /*
-       Se não houver sessão, tenta renovar uma vez.
-       Isso evita expulsar o usuário por uma falha
-       momentânea de atualização do token.
+       Se não existir sessão, tenta renovar.
     */
 
     if(
       !session
     ){
 
-      const refreshResult =
+      const refresh =
         await supabaseClient.auth.refreshSession();
 
 
       if(
-        !refreshResult.error
+        refresh.error
       ){
 
-        session =
-          refreshResult.data?.session;
+        window.location.href =
+          "/login.html";
+
+        return false;
 
       }
+
+
+      session =
+        refresh.data?.session;
 
     }
 
@@ -588,6 +622,7 @@ async function initializeAuth(){
         "/login.html";
 
       return false;
+
     }
 
 
@@ -611,106 +646,14 @@ async function initializeAuth(){
 
 
     return false;
-  }
-}
-
-
-/* =========================================================
-   PEGA O TOKEN ATUAL
-   ========================================================= */
-
-async function getAuthToken(){
-
-  if(
-    !supabaseClient
-  ){
-
-    throw new Error(
-      "Sessão ainda não foi inicializada."
-    );
 
   }
-
-
-  let result =
-    await supabaseClient.auth.getSession();
-
-
-  if(
-    result.error
-  ){
-
-    throw result.error;
-
-  }
-
-
-  let session =
-    result.data?.session;
-
-
-  /*
-     Se não houver sessão, tenta renovar.
-  */
-
-  if(
-    !session
-  ){
-
-    const refreshResult =
-      await supabaseClient.auth.refreshSession();
-
-
-    if(
-      refreshResult.error
-    ){
-
-      throw refreshResult.error;
-
-    }
-
-
-    session =
-      refreshResult.data?.session;
-
-  }
-
-
-  if(
-    !session?.access_token
-  ){
-
-    throw new Error(
-      "Sua sessão expirou. Faça login novamente."
-    );
-
-  }
-
-
-  return session.access_token;
-}
-
-
-/* =========================================================
-   CABEÇALHO DE AUTORIZAÇÃO
-   ========================================================= */
-
-async function authHeaders(){
-
-  const token =
-    await getAuthToken();
-
-
-  return {
-    "Authorization":
-      "Bearer " + token
-  };
 
 }
 
 
 /* =========================================================
-   TENTA RENOVAR A SESSÃO
+   RENOVA A SESSÃO
    ========================================================= */
 
 async function refreshAuthSession(){
@@ -735,6 +678,12 @@ async function refreshAuthSession(){
       !result.data?.session
     ){
 
+      console.error(
+        "Falha ao renovar sessão:",
+        result.error
+      );
+
+
       return false;
 
     }
@@ -758,16 +707,229 @@ async function refreshAuthSession(){
 
 
 /* =========================================================
-   DADOS DOS VÍDEOS
+   TOKEN ATUAL
    ========================================================= */
 
-const D={
+async function getAuthToken(
+  forceRefresh = false
+){
+
+  if(
+    !supabaseClient
+  ){
+
+    throw new Error(
+      "Sessão ainda não foi inicializada."
+    );
+
+  }
+
+
+  /*
+     Quando solicitado, força uma renovação.
+  */
+
+  if(
+    forceRefresh
+  ){
+
+    const refreshed =
+      await refreshAuthSession();
+
+
+    if(
+      !refreshed
+    ){
+
+      throw new Error(
+        "Sessão inválida ou expirada."
+      );
+
+    }
+
+  }
+
+
+  let result =
+    await supabaseClient.auth.getSession();
+
+
+  if(
+    result.error
+  ){
+
+    throw result.error;
+
+  }
+
+
+  let session =
+    result.data?.session;
+
+
+  if(
+    !session
+  ){
+
+    const refreshed =
+      await refreshAuthSession();
+
+
+    if(
+      !refreshed
+    ){
+
+      throw new Error(
+        "Sessão inválida ou expirada."
+      );
+
+    }
+
+
+    result =
+      await supabaseClient.auth.getSession();
+
+
+    if(
+      result.error
+    ){
+
+      throw result.error;
+
+    }
+
+
+    session =
+      result.data?.session;
+
+  }
+
+
+  if(
+    !session?.access_token
+  ){
+
+    throw new Error(
+      "Sessão inválida ou expirada."
+    );
+
+  }
+
+
+  /*
+     Verifica a validade do JWT.
+
+     Se estiver a menos de 60 segundos
+     de expirar, renova antes de enviar.
+  */
+
+  if(
+    session.expires_at
+  ){
+
+    const expiresAt =
+      Number(
+        session.expires_at
+      );
+
+
+    const now =
+      Math.floor(
+        Date.now() / 1000
+      );
+
+
+    if(
+      expiresAt <=
+      now + 60
+    ){
+
+      const refreshed =
+        await refreshAuthSession();
+
+
+      if(
+        !refreshed
+      ){
+
+        throw new Error(
+          "Sessão inválida ou expirada."
+        );
+
+      }
+
+
+      result =
+        await supabaseClient.auth.getSession();
+
+
+      if(
+        result.error
+      ){
+
+        throw result.error;
+
+      }
+
+
+      session =
+        result.data?.session;
+
+
+      if(
+        !session?.access_token
+      ){
+
+        throw new Error(
+          "Sessão inválida ou expirada."
+        );
+
+      }
+
+    }
+
+  }
+
+
+  return session.access_token;
+
+}
+
+
+/* =========================================================
+   CABEÇALHO DE AUTORIZAÇÃO
+   ========================================================= */
+
+async function authHeaders(
+  forceRefresh = false
+){
+
+  const token =
+    await getAuthToken(
+      forceRefresh
+    );
+
+
+  return {
+    "Authorization":
+      "Bearer " + token
+  };
+
+}
+
+
+/* =========================================================
+   DADOS
+   ========================================================= */
+
+const D = {
   h:[],
   b:[],
   c:[]
 };
 
-const $=id=>
+
+const $ = id =>
   document.getElementById(id);
 
 
@@ -781,20 +943,20 @@ function setup(
   list
 ){
 
-  $(id).onchange=e=>{
+  $(id).onchange = e => {
 
-    D[k]=[
+    D[k] = [
       ...e.target.files
     ];
 
 
-    $(list).innerHTML=
+    $(list).innerHTML =
       D[k]
         .map(
-          (f,i)=>
-            `<div class="file">${i+1}. ${escapeHtml(f.name)}</div>`
+          (f,i) =>
+            `<div class="file">${i + 1}. ${escapeHtml(f.name)}</div>`
         )
-        .join('');
+        .join("");
 
 
     update();
@@ -815,60 +977,60 @@ function escapeHtml(
   return String(value)
     .replace(
       /&/g,
-      '&amp;'
+      "&amp;"
     )
     .replace(
       /</g,
-      '&lt;'
+      "&lt;"
     )
     .replace(
       />/g,
-      '&gt;'
+      "&gt;"
     )
     .replace(
       /"/g,
-      '&quot;'
+      "&quot;"
     )
     .replace(
       /'/g,
-      '&#039;'
+      "&#039;"
     );
 
 }
 
 
 /* =========================================================
-   ATUALIZA CONTADORES
+   CONTADORES
    ========================================================= */
 
 function update(){
 
-  $('hn').textContent=
+  $("hn").textContent =
     D.h.length;
 
 
-  $('bn').textContent=
+  $("bn").textContent =
     D.b.length;
 
 
-  $('cn').textContent=
+  $("cn").textContent =
     D.c.length;
 
 
-  $('total').textContent=
+  $("total").textContent =
     (
       D.h.length *
       D.b.length *
       D.c.length
     ).toLocaleString(
-      'pt-BR'
+      "pt-BR"
     );
 
 }
 
 
 /* =========================================================
-   CLASSE DE ORIGINALIDADE
+   ORIGINALIDADE
    ========================================================= */
 
 function originalityClass(
@@ -879,7 +1041,7 @@ function originalityClass(
     value >= 90
   ){
 
-    return 'high';
+    return "high";
 
   }
 
@@ -888,18 +1050,18 @@ function originalityClass(
     value >= 80
   ){
 
-    return 'medium';
+    return "medium";
 
   }
 
 
-  return 'low';
+  return "low";
 
 }
 
 
 /* =========================================================
-   RESUMO DE ORIGINALIDADE
+   RESUMO
    ========================================================= */
 
 function renderOriginalitySummary(
@@ -910,8 +1072,8 @@ function renderOriginalitySummary(
     !files.length
   ){
 
-    $('originalitySummary')
-      .innerHTML='';
+    $("originalitySummary")
+      .innerHTML = "";
 
 
     return;
@@ -919,7 +1081,7 @@ function renderOriginalitySummary(
   }
 
 
-  const counts={
+  const counts = {
     100:0,
     90:0,
     80:0,
@@ -928,7 +1090,7 @@ function renderOriginalitySummary(
 
 
   files.forEach(
-    file=>{
+    file => {
 
       const value =
         Number(
@@ -937,11 +1099,10 @@ function renderOriginalitySummary(
 
 
       if(
-        Object.prototype.hasOwnProperty
-          .call(
-            counts,
-            value
-          )
+        Object.prototype.hasOwnProperty.call(
+          counts,
+          value
+        )
       ){
 
         counts[value]++;
@@ -952,8 +1113,8 @@ function renderOriginalitySummary(
   );
 
 
-  $('originalitySummary')
-    .innerHTML=`
+  $("originalitySummary")
+    .innerHTML = `
 
       <div class="originality-summary">
 
@@ -1016,7 +1177,7 @@ function renderOriginalitySummary(
 
 
 /* =========================================================
-   URL AUTENTICADA PARA VÍDEOS
+   URL AUTENTICADA
    ========================================================= */
 
 async function createAuthenticatedVideoUrl(
@@ -1047,33 +1208,33 @@ async function createAuthenticatedVideoUrl(
 
 
 /* =========================================================
-   CONFIGURA OS SELETORES
+   SELETORES
    ========================================================= */
 
 setup(
-  'hooks',
-  'h',
-  'hl'
+  "hooks",
+  "h",
+  "hl"
 );
 
 setup(
-  'bodies',
-  'b',
-  'bl'
+  "bodies",
+  "b",
+  "bl"
 );
 
 setup(
-  'ctas',
-  'c',
-  'cl'
+  "ctas",
+  "c",
+  "cl"
 );
 
 
 /* =========================================================
-   BOTÃO GERAR
+   GERAR
    ========================================================= */
 
-$('go').onclick =
+$("go").onclick =
   async () => {
 
     if(
@@ -1083,7 +1244,7 @@ $('go').onclick =
     ){
 
       alert(
-        'Selecione pelo menos 1 vídeo em cada categoria.'
+        "Selecione pelo menos 1 vídeo em cada categoria."
       );
 
 
@@ -1099,7 +1260,7 @@ $('go').onclick =
     D.h.forEach(
       f =>
         fd.append(
-          'hooks',
+          "hooks",
           f
         )
     );
@@ -1108,7 +1269,7 @@ $('go').onclick =
     D.b.forEach(
       f =>
         fd.append(
-          'bodies',
+          "bodies",
           f
         )
     );
@@ -1117,64 +1278,76 @@ $('go').onclick =
     D.c.forEach(
       f =>
         fd.append(
-          'ctas',
+          "ctas",
           f
         )
     );
 
 
-    $('go').disabled =
+    $("go").disabled =
       true;
 
 
-    $('download')
+    $("download")
       .style.display =
-      'none';
+      "none";
 
 
-    $('result')
-      .innerHTML='';
+    $("result")
+      .innerHTML = "";
 
 
-    $('originalitySummary')
-      .innerHTML='';
+    $("originalitySummary")
+      .innerHTML = "";
 
 
-    $('bar')
+    $("bar")
       .style.width =
-      '0%';
+      "0%";
 
 
-    $('status')
+    $("status")
       .textContent =
-      'Enviando vídeos…';
+      "Atualizando sessão…";
 
 
     try{
 
+      /*
+         IMPORTANTE:
+
+         Antes de começar uma geração,
+         força uma renovação do token.
+
+         Isso evita enviar para o servidor
+         um access token velho.
+      */
+
       let headers =
-        await authHeaders();
+        await authHeaders(
+          true
+        );
+
+
+      $("status")
+        .textContent =
+        "Enviando vídeos…";
 
 
       let r =
         await fetch(
-          '/api/jobs',
+          "/api/jobs",
           {
-            method:
-              'POST',
-
+            method:"POST",
             headers,
-
-            body:
-              fd
+            body:fd
           }
         );
 
 
       /*
-         Se o servidor responder 401,
-         tenta renovar a sessão e repete
-         o envio uma única vez.
+         Se ainda houver 401,
+         força outra renovação e tenta novamente.
       */
 
       if(
@@ -1186,41 +1359,57 @@ $('go').onclick =
 
 
         if(
-          refreshed
+          !refreshed
         ){
 
-          headers =
-            await authHeaders();
-
-
-          r =
-            await fetch(
-              '/api/jobs',
-              {
-                method:
-                  'POST',
-
-                headers,
-
-                body:
-                  fd
-              }
-            );
+          throw new Error(
+            "Sessão inválida ou expirada. Faça login novamente."
+          );
 
         }
+
+
+        headers =
+          await authHeaders(
+            false
+          );
+
+
+        r =
+          await fetch(
+            "/api/jobs",
+            {
+              method:"POST",
+              headers,
+              body:fd
+            }
+          );
 
       }
 
 
-      const j =
-        await r.json();
+      let j;
+
+
+      try{
+
+        j =
+          await r.json();
+
+      }catch(error){
+
+        throw new Error(
+          `Resposta inválida do servidor. Código: ${r.status}`
+        );
+
+      }
 
 
       if(
         !r.ok
       ){
 
-        throw Error(
+        throw new Error(
           j.error ||
           `Falha no envio. Código: ${r.status}`
         );
@@ -1228,45 +1417,53 @@ $('go').onclick =
       }
 
 
+      /*
+         PROCESSAMENTO
+      */
+
       const poll =
         async () => {
 
-          let headers =
-            await authHeaders();
+          try{
+
+            let headers =
+              await authHeaders();
 
 
-          let response =
-            await fetch(
-
-              '/api/jobs/' +
-              encodeURIComponent(
-                j.id
-              ),
-
-              {
-                headers
-              }
-
-            );
+            let response =
+              await fetch(
+                "/api/jobs/" +
+                encodeURIComponent(
+                  j.id
+                ),
+                {
+                  headers
+                }
+              );
 
 
-          /*
-             Se o token tiver expirado
-             durante o processamento,
-             tenta renovar uma vez.
-          */
-
-          if(
-            response.status === 401
-          ){
-
-            const refreshed =
-              await refreshAuthSession();
-
+            /*
+               Token expirou durante o processamento.
+            */
 
             if(
-              refreshed
+              response.status === 401
             ){
+
+              const refreshed =
+                await refreshAuthSession();
+
+
+              if(
+                !refreshed
+              ){
+
+                throw new Error(
+                  "Sessão inválida ou expirada durante o processamento."
+                );
+
+              }
+
 
               headers =
                 await authHeaders();
@@ -1274,241 +1471,283 @@ $('go').onclick =
 
               response =
                 await fetch(
-
-                  '/api/jobs/' +
+                  "/api/jobs/" +
                   encodeURIComponent(
                     j.id
                   ),
-
                   {
                     headers
                   }
-
                 );
 
             }
 
-          }
+
+            let x;
 
 
-          const x =
-            await response.json();
+            try{
+
+              x =
+                await response.json();
+
+            }catch(error){
+
+              throw new Error(
+                `Resposta inválida do servidor. Código: ${response.status}`
+              );
+
+            }
 
 
-          if(
-            !response.ok
-          ){
-
-            throw Error(
-              x.error ||
-              `Falha ao consultar processamento. Código: ${response.status}`
-            );
-
-          }
-
-
-          const pct =
-            x.total
-              ? Math.round(
-                  x.done /
-                  x.total *
-                  100
-                )
-              : 0;
-
-
-          $('bar')
-            .style.width =
-            pct + '%';
-
-
-          $('status')
-            .textContent =
-            x.current ||
-            'Processando…';
-
-
-          if(
-            x.files?.length
-          ){
-
-            renderOriginalitySummary(
-              x.files
-            );
-
-
-            const videoItems =
-              [];
-
-
-            for(
-              const f
-              of x.files
+            if(
+              !response.ok
             ){
 
-              const videoUrl =
-                await createAuthenticatedVideoUrl(
-                  j.id,
-                  f.name
-                );
-
-
-              const originality =
-                Number(
-                  f.originality
-                );
-
-
-              videoItems.push(`
-
-                <div class="combo">
-
-                  <b>
-                    ✓ ${escapeHtml(f.name)}
-                  </b>
-
-                  <div class="originality ${originalityClass(originality)}">
-
-                    <small>
-                      Originalidade estrutural
-                    </small>
-
-                    ${originality}%
-
-                  </div>
-
-
-                  <video
-                    class="preview"
-                    controls
-                    playsinline
-                    preload="metadata"
-                    src="${videoUrl}"
-                  >
-
-                    Seu navegador não consegue reproduzir este vídeo.
-
-                  </video>
-
-
-                  <span class="pill">
-
-                    Gancho:
-                    ${escapeHtml(f.hook)}
-
-                  </span>
-
-
-                  <span class="pill">
-
-                    Corpo:
-                    ${escapeHtml(f.body)}
-
-                  </span>
-
-
-                  <span class="pill">
-
-                    CTA:
-                    ${escapeHtml(f.cta)}
-
-                  </span>
-
-
-                  <br>
-
-
-                  <span style="color:#aaa">
-
-                    Combinação única #${f.index}
-
-                  </span>
-
-
-                  <a
-                    class="single-download"
-                    href="${videoUrl}"
-                    download="${escapeHtml(f.name)}"
-                  >
-
-                    ⬇ Baixar este vídeo
-
-                  </a>
-
-                </div>
-
-              `);
+              throw new Error(
+                x.error ||
+                `Falha ao consultar processamento. Código: ${response.status}`
+              );
 
             }
 
 
-            $('result')
-              .innerHTML =
-              videoItems.join('');
+            const pct =
+              x.total
+                ? Math.round(
+                    x.done /
+                    x.total *
+                    100
+                  )
+                : 0;
 
-          }
 
-
-          if(
-            x.status ===
-            'done'
-          ){
-
-            $('bar')
+            $("bar")
               .style.width =
-              '100%';
+              pct + "%";
 
 
-            const token =
-              await getAuthToken();
+            $("status")
+              .textContent =
+              x.current ||
+              "Processando…";
 
 
-            $('download')
-              .href =
-              x.zip +
-              '?token=' +
-              encodeURIComponent(
-                token
+            if(
+              x.files?.length
+            ){
+
+              renderOriginalitySummary(
+                x.files
               );
 
 
-            $('download')
-              .style.display =
-              'block';
+              const videoItems =
+                [];
 
 
-            $('status')
+              for(
+                const f
+                of x.files
+              ){
+
+                const videoUrl =
+                  await createAuthenticatedVideoUrl(
+                    j.id,
+                    f.name
+                  );
+
+
+                const originality =
+                  Number(
+                    f.originality
+                  );
+
+
+                videoItems.push(`
+
+                  <div class="combo">
+
+                    <b>
+                      ✓ ${escapeHtml(f.name)}
+                    </b>
+
+
+                    <div class="originality ${originalityClass(originality)}">
+
+                      <small>
+                        Originalidade estrutural
+                      </small>
+
+                      ${originality}%
+
+                    </div>
+
+
+                    <video
+                      class="preview"
+                      controls
+                      playsinline
+                      preload="metadata"
+                      src="${videoUrl}"
+                    >
+
+                      Seu navegador não consegue reproduzir este vídeo.
+
+                    </video>
+
+
+                    <span class="pill">
+
+                      Gancho:
+                      ${escapeHtml(f.hook)}
+
+                    </span>
+
+
+                    <span class="pill">
+
+                      Corpo:
+                      ${escapeHtml(f.body)}
+
+                    </span>
+
+
+                    <span class="pill">
+
+                      CTA:
+                      ${escapeHtml(f.cta)}
+
+                    </span>
+
+
+                    <br>
+
+
+                    <span style="color:#aaa">
+
+                      Combinação única #${f.index}
+
+                    </span>
+
+
+                    <a
+                      class="single-download"
+                      href="${videoUrl}"
+                      download="${escapeHtml(f.name)}"
+                    >
+
+                      ⬇ Baixar este vídeo
+
+                    </a>
+
+                  </div>
+
+                `);
+
+              }
+
+
+              $("result")
+                .innerHTML =
+                videoItems.join("");
+
+            }
+
+
+            /*
+               TERMINOU
+            */
+
+            if(
+              x.status ===
+              "done"
+            ){
+
+              $("bar")
+                .style.width =
+                "100%";
+
+
+              const token =
+                await getAuthToken();
+
+
+              $("download")
+                .href =
+                x.zip +
+                "?token=" +
+                encodeURIComponent(
+                  token
+                );
+
+
+              $("download")
+                .style.display =
+                "block";
+
+
+              $("status")
+                .textContent =
+                `Concluído: ${x.total} vídeos.`;
+
+
+              $("go")
+                .disabled =
+                false;
+
+
+              return;
+
+            }
+
+
+            /*
+               ERRO NO PROCESSAMENTO
+            */
+
+            if(
+              x.status ===
+              "error"
+            ){
+
+              throw new Error(
+                x.error ||
+                "Processamento falhou"
+              );
+
+            }
+
+
+            setTimeout(
+              poll,
+              1000
+            );
+
+          }catch(error){
+
+            console.error(
+              "Erro no processamento:",
+              error
+            );
+
+
+            $("status")
               .textContent =
-              `Concluído: ${x.total} vídeos.`;
+              "Erro: " +
+              error.message;
 
 
-            $('go')
+            alert(
+              error.message
+            );
+
+
+            $("go")
               .disabled =
               false;
 
-
-            return;
-
           }
-
-
-          if(
-            x.status ===
-            'error'
-          ){
-
-            throw Error(
-              x.error ||
-              'Processamento falhou'
-            );
-
-          }
-
-
-          setTimeout(
-            poll,
-            1000
-          );
 
         };
 
@@ -1516,25 +1755,26 @@ $('go').onclick =
       poll();
 
 
-    }catch(e){
+    }catch(error){
 
       console.error(
-        e
+        "Erro ao gerar vídeos:",
+        error
       );
 
 
-      $('status')
+      $("status")
         .textContent =
-        'Erro: ' +
-        e.message;
+        "Erro: " +
+        error.message;
 
 
       alert(
-        e.message
+        error.message
       );
 
 
-      $('go')
+      $("go")
         .disabled =
         false;
 
@@ -1544,7 +1784,7 @@ $('go').onclick =
 
 
 /* =========================================================
-   INICIA AUTENTICAÇÃO
+   INICIA
    ========================================================= */
 
 (async()=>{
@@ -1557,9 +1797,9 @@ $('go').onclick =
     authenticated
   ){
 
-    $('status')
+    $("status")
       .textContent =
-      'Pronto.';
+      "Pronto.";
 
   }
 
