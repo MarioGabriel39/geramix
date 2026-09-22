@@ -240,8 +240,8 @@ function runFFmpeg(args, cwd) {
             "error",
 
             /*
-             * Apenas 1 thread para manter
-             * o consumo de memória controlado.
+             * Mantemos apenas 1 thread
+             * para controlar o consumo de memória.
              */
             "-threads",
             "1",
@@ -296,20 +296,12 @@ function runFFmpeg(args, cwd) {
 
 
 /* =========================================================
-   VERIFICA ÁUDIO — SEM PROCESSAR O ARQUIVO INTEIRO
+   VERIFICA ÁUDIO
    ========================================================= */
 
 async function hasAudio(input, cwd) {
   try {
 
-    /*
-     * Apenas verifica se existe a primeira
-     * faixa de áudio.
-     *
-     * Não copia o áudio inteiro.
-     * Não processa o vídeo inteiro.
-     * Isso é muito mais rápido que a versão anterior.
-     */
     await runFFmpeg(
       [
         "-i",
@@ -359,8 +351,8 @@ async function normalizeVideo(
   ];
 
   /*
-   * Se não houver áudio, adiciona
-   * uma faixa de silêncio.
+   * Se não houver áudio,
+   * adiciona silêncio.
    */
   if (!audio) {
     args.push(
@@ -380,10 +372,6 @@ async function normalizeVideo(
       ? "0:a:0"
       : "1:a:0",
 
-    /*
-     * Todos os vídeos ficam com exatamente
-     * o mesmo padrão.
-     */
     "-vf",
     "scale=720:1280:force_original_aspect_ratio=decrease," +
     "pad=720:1280:(ow-iw)/2:(oh-ih)/2," +
@@ -424,12 +412,8 @@ async function normalizeVideo(
     "-shortest",
 
     /*
-     * IMPORTANTE:
-     * não usamos +faststart aqui.
-     *
-     * Esses arquivos são intermediários.
-     * Fazer faststart neles só acrescenta
-     * trabalho.
+     * Arquivo intermediário.
+     * Não usamos faststart aqui.
      */
     "-y",
     output
@@ -486,21 +470,24 @@ async function concatNormalized(
         listFile,
 
         /*
-         * Os arquivos já foram
-         * normalizados.
+         * Os vídeos já estão normalizados.
          *
-         * Portanto não há nova
-         * codificação aqui.
+         * Portanto fazemos somente
+         * a cópia dos streams.
          */
         "-c",
         "copy",
 
         /*
-         * O faststart fica somente
-         * no arquivo final.
+         * ALTERAÇÃO DE VELOCIDADE:
+         *
+         * Removido:
+         * -movflags +faststart
+         *
+         * Isso evita a etapa extra de
+         * movimentação do índice do MP4
+         * em cada vídeo gerado.
          */
-        "-movflags",
-        "+faststart",
 
         "-y",
         output
@@ -1058,8 +1045,8 @@ app.post(
                 "zip",
                 {
                   /*
-                   * Os MP4 já são comprimidos.
-                   * Não precisamos recomprimir.
+                   * MP4 já é comprimido.
+                   * Não recomprimir.
                    */
                   zlib: {
                     level: 0
