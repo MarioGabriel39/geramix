@@ -130,9 +130,6 @@ async function requireAuth(req, res, next) {
       });
     }
 
-    /*
-     * Valida diretamente a sessão no Supabase.
-     */
     const response =
       await fetch(
         `${SUPABASE_URL}/auth/v1/user`,
@@ -230,11 +227,8 @@ app.get("/health", (_, res) => {
    ========================================================= */
 
 /*
- * IMPORTANTE:
- * Render Free tem limite de aproximadamente 512 MB.
- *
- * Usamos apenas 1 FFmpeg por vez para reduzir
- * drasticamente o pico de memória.
+ * Apenas 1 FFmpeg por vez.
+ * Isso reduz o consumo de RAM do Render Free.
  */
 const FFMPEG_CONCURRENCY = 1;
 
@@ -258,7 +252,8 @@ function runFFmpeg(args, cwd) {
             "error",
 
             /*
-             * Reduz uso de memória e CPU.
+             * Limita threads para reduzir
+             * consumo de memória.
              */
             "-threads",
             "1",
@@ -278,9 +273,8 @@ function runFFmpeg(args, cwd) {
           err += data.toString();
 
           /*
-           * Evita acumular uma saída enorme
-           * em memória caso o FFmpeg produza
-           * muitas mensagens.
+           * Não deixa o texto de erro
+           * crescer indefinidamente.
            */
           if (err.length > 10000) {
             err = err.slice(-10000);
@@ -347,6 +341,178 @@ async function hasAudio(input, cwd) {
 
 
 /* =========================================================
+   NORMALIZA UM VÍDEO
+   ========================================================= */
+
+async function normalizeVideo(
+  input,
+  output,
+  cwd
+) {
+
+  const audio =
+    await hasAudio(
+      input,
+      cwd
+    );
+
+  const args = [
+    "-i",
+    input
+  ];
+
+  /*
+   * Se o vídeo não tiver áudio,
+   * adicionamos uma faixa de silêncio.
+   */
+  if (!audio) {
+
+    args.push(
+      "-f",
+      "lavfi",
+      "-i",
+      "anullsrc=r=48000:cl=stereo"
+    );
+
+  }
+
+  args.push(
+    "-map",
+    "0:v:0",
+    "-map",
+    audio
+      ? "0:a:0"
+      : "1:a:0",
+
+    "-vf",
+    "scale=720:1280:force_original_aspect_ratio=decrease," +
+    "pad=720:1280:(ow-iw)/2:(oh-ih)/2," +
+    "setsar=1," +
+    "fps=30," +
+    "format=yuv420p",
+
+    "-c:v",
+    "libx264",
+
+    "-preset",
+    "ultrafast",
+
+    "-crf",
+    "28",
+
+    "-pix_fmt",
+    "yuv420p",
+
+    "-r",
+    "30",
+
+    "-c:a",
+    "aac",
+
+    "-ar",
+    "48000",
+
+    "-ac",
+    "2",
+
+    "-b:a",
+    "96k",
+
+    /*
+     * Faz o vídeo terminar junto
+     * com a fonte mais curta.
+     */
+    "-shortest",
+
+    "-movflags",
+    "+faststart",
+
+    "-y",
+    output
+  );
+
+  await runFFmpeg(
+    args,
+    cwd
+  );
+}
+
+
+/* =========================================================
+   JUNTA 3 VÍDEOS JÁ NORMALIZADOS
+   ========================================================= */
+
+async function concatNormalized(
+  hook,
+  body,
+  cta,
+  output,
+  cwd
+) {
+
+  const listFile =
+    path.join(
+      cwd,
+      `concat-${crypto.randomUUID()}.txt`
+    );
+
+  const content =
+    [
+      hook,
+      body,
+      cta
+    ]
+      .map(
+        file =>
+          `file '${path.basename(file).replace(/'/g, "'\\''")}'`
+      )
+      .join("\n");
+
+  await fsp.writeFile(
+    listFile,
+    content,
+    "utf8"
+  );
+
+  try {
+
+    await runFFmpeg(
+      [
+        "-f",
+        "concat",
+
+        "-safe",
+        "0",
+
+        "-i",
+        listFile,
+
+        "-c",
+        "copy",
+
+        "-movflags",
+        "+faststart",
+
+        "-y",
+        output
+      ],
+      cwd
+    );
+
+  } finally {
+
+    await fsp.rm(
+      listFile,
+      {
+        force: true
+      }
+    );
+
+  }
+}
+
+
+/* =========================================================
    NOME SEGURO
    ========================================================= */
 
@@ -370,6 +536,7 @@ function calculateOriginality(
   current,
   previous
 ) {
+
   if (!previous) {
     return 100;
   }
@@ -413,193 +580,103 @@ async function concat3(
   cwd
 ) {
 
-  const inputs = [
-    hook,
-    body,
-    cta
-  ];
+  /*
+   * Arquivos temporários.
+   *
+   * Apenas um vídeo é normalizado por vez.
+   */
+  const normalizedHook =
+    path.join(
+      cwd,
+      `tmp-hook-${crypto.randomUUID()}.mp4`
+    );
 
-  const audioFlags = [];
+  const normalizedBody =
+    path.join(
+      cwd,
+      `tmp-body-${crypto.randomUUID()}.mp4`
+    );
 
-  for (
-    const input
-    of inputs
-  ) {
+  const normalizedCta =
+    path.join(
+      cwd,
+      `tmp-cta-${crypto.randomUUID()}.mp4`
+    );
 
-    audioFlags.push(
-      await hasAudio(
-        input,
-        cwd
+  try {
+
+    /*
+     * 1. Normaliza o gancho.
+     */
+    await normalizeVideo(
+      hook,
+      normalizedHook,
+      cwd
+    );
+
+    /*
+     * 2. Normaliza o corpo.
+     */
+    await normalizeVideo(
+      body,
+      normalizedBody,
+      cwd
+    );
+
+    /*
+     * 3. Normaliza o CTA.
+     */
+    await normalizeVideo(
+      cta,
+      normalizedCta,
+      cwd
+    );
+
+    /*
+     * 4. Só agora junta os três.
+     *
+     * Como os três já estão padronizados,
+     * o concat usa cópia direta e quase
+     * não exige processamento.
+     */
+    await concatNormalized(
+      normalizedHook,
+      normalizedBody,
+      normalizedCta,
+      output,
+      cwd
+    );
+
+  } finally {
+
+    /*
+     * Apaga os arquivos temporários
+     * mesmo se ocorrer algum erro.
+     */
+    await Promise.all([
+      fsp.rm(
+        normalizedHook,
+        {
+          force: true
+        }
+      ),
+
+      fsp.rm(
+        normalizedBody,
+        {
+          force: true
+        }
+      ),
+
+      fsp.rm(
+        normalizedCta,
+        {
+          force: true
+        }
       )
-    );
+    ]);
 
   }
-
-  const args = [];
-
-  for (
-    const input
-    of inputs
-  ) {
-
-    args.push(
-      "-i",
-      input
-    );
-
-  }
-
-  const silentIndexes = [];
-
-  for (
-    const input
-    of inputs
-  ) {
-
-    if (!audioFlags[inputs.indexOf(input)]) {
-      const silentIndex =
-        inputs.length +
-        silentIndexes.length;
-
-      silentIndexes.push(
-        silentIndex
-      );
-
-      args.push(
-        "-f",
-        "lavfi",
-        "-t",
-        "86400",
-        "-i",
-        "anullsrc=r=48000:cl=stereo"
-      );
-    }
-
-  }
-
-  const filterParts = [];
-
-  for (
-    let i = 0;
-    i < inputs.length;
-    i++
-  ) {
-
-    filterParts.push(
-      `[${i}:v:0]` +
-      `scale=720:1280:force_original_aspect_ratio=decrease,` +
-      `pad=720:1280:(ow-iw)/2:(oh-ih)/2,` +
-      `setsar=1,` +
-      `fps=30,` +
-      `format=yuv420p,` +
-      `setpts=PTS-STARTPTS` +
-      `[v${i}]`
-    );
-
-  }
-
-  let silentCounter = 0;
-
-  for (
-    let i = 0;
-    i < inputs.length;
-    i++
-  ) {
-
-    if (audioFlags[i]) {
-
-      filterParts.push(
-        `[${i}:a:0]` +
-        `aresample=48000,` +
-        `aformat=sample_rates=48000:channel_layouts=stereo,` +
-        `asetpts=PTS-STARTPTS` +
-        `[a${i}]`
-      );
-
-    } else {
-
-      const silentIndex =
-        inputs.length +
-        silentCounter;
-
-      filterParts.push(
-        `[${silentIndex}:a:0]` +
-        `asetpts=PTS-STARTPTS` +
-        `[a${i}]`
-      );
-
-      silentCounter++;
-    }
-
-  }
-
-  let concatInputs = "";
-
-  for (
-    let i = 0;
-    i < inputs.length;
-    i++
-  ) {
-
-    concatInputs +=
-      `[v${i}][a${i}]`;
-
-  }
-
-  filterParts.push(
-    `${concatInputs}` +
-    `concat=n=3:v=1:a=1:` +
-    `[vout][aout]`
-  );
-
-  args.push(
-    "-filter_complex",
-    filterParts.join(";"),
-
-    "-map",
-    "[vout]",
-
-    "-map",
-    "[aout]",
-
-    "-c:v",
-    "libx264",
-
-    "-preset",
-    "veryfast",
-
-    "-crf",
-    "23",
-
-    "-pix_fmt",
-    "yuv420p",
-
-    "-r",
-    "30",
-
-    "-c:a",
-    "aac",
-
-    "-ar",
-    "48000",
-
-    "-ac",
-    "2",
-
-    "-b:a",
-    "128k",
-
-    "-movflags",
-    "+faststart",
-
-    "-y",
-    output
-  );
-
-  await runFFmpeg(
-    args,
-    cwd
-  );
 }
 
 
@@ -682,8 +759,10 @@ async function runPool(
 const upload =
   multer({
     dest: UPLOADS,
+
     limits: {
       files: 30,
+
       fileSize:
         200 * 1024 * 1024
     }
@@ -703,21 +782,26 @@ const jobs = new Map();
 
 app.post(
   "/api/jobs",
+
   requireAuth,
+
   upload.fields([
     {
       name: "hooks",
       maxCount: 10
     },
+
     {
       name: "bodies",
       maxCount: 10
     },
+
     {
       name: "ctas",
       maxCount: 10
     }
   ]),
+
   async (req, res) => {
 
     const hooks =
@@ -770,19 +854,35 @@ app.post(
 
     await fsp.mkdir(
       dir,
-      { recursive: true }
+      {
+        recursive: true
+      }
     );
 
     const job = {
       id,
-      userId: req.user.id,
-      status: "processing",
+
+      userId:
+        req.user.id,
+
+      status:
+        "processing",
+
       total,
-      done: 0,
-      current: "Iniciando…",
+
+      done:
+        0,
+
+      current:
+        "Iniciando…",
+
       files: [],
-      error: null,
-      mode: "montagem-direta"
+
+      error:
+        null,
+
+      mode:
+        "montagem-direta"
     };
 
     jobs.set(
@@ -832,6 +932,7 @@ app.post(
           "Montando vídeos…";
 
         await runPool(
+
           combinations,
 
           async (
@@ -840,6 +941,7 @@ app.post(
               body,
               cta
             },
+
             index
           ) => {
 
@@ -870,8 +972,11 @@ app.post(
               );
 
             job.files.push({
+
               name:
-                path.basename(output),
+                path.basename(
+                  output
+                ),
 
               hook:
                 safeName(
@@ -888,7 +993,9 @@ app.post(
                   cta.originalname
                 ),
 
-              index: n,
+              index:
+                n,
+
               originality
             });
 
@@ -900,12 +1007,13 @@ app.post(
           FFMPEG_CONCURRENCY
         );
 
-        job.files.sort(
-          (a, b) =>
-            a.index - b.index
-        );
+
+        /* =================================================
+           APAGA UPLOADS ORIGINAIS
+           ================================================= */
 
         await Promise.all(
+
           [
             ...hooks,
             ...bodies,
@@ -914,10 +1022,28 @@ app.post(
             file =>
               fsp.rm(
                 file.path,
-                { force: true }
+                {
+                  force: true
+                }
               )
           )
+
         );
+
+
+        /* =================================================
+           ORDENA ARQUIVOS
+           ================================================= */
+
+        job.files.sort(
+          (a, b) =>
+            a.index - b.index
+        );
+
+
+        /* =================================================
+           CRIA ZIP
+           ================================================= */
 
         job.current =
           "Criando ZIP…";
@@ -940,6 +1066,10 @@ app.post(
               archiver(
                 "zip",
                 {
+                  /*
+                   * Nível 0 porque MP4 já é
+                   * altamente comprimido.
+                   */
                   zlib: {
                     level: 0
                   }
@@ -988,6 +1118,11 @@ app.post(
           }
         );
 
+
+        /* =================================================
+           FINALIZADO
+           ================================================= */
+
         job.status =
           "done";
 
@@ -1015,6 +1150,7 @@ app.post(
           "Falhou";
 
         await Promise.all(
+
           [
             ...hooks,
             ...bodies,
@@ -1023,9 +1159,12 @@ app.post(
             file =>
               fsp.rm(
                 file.path,
-                { force: true }
+                {
+                  force: true
+                }
               )
           )
+
         );
 
       }
@@ -1042,7 +1181,9 @@ app.post(
 
 app.get(
   "/api/jobs/:id",
+
   requireAuth,
+
   (req, res) => {
 
     const job =
@@ -1083,7 +1224,9 @@ app.get(
 
 app.get(
   "/api/jobs/:id/zip",
+
   requireAuth,
+
   (req, res) => {
 
     const job =
@@ -1143,7 +1286,9 @@ app.get(
 
 app.get(
   "/api/jobs/:id/video/:name",
+
   requireAuth,
+
   (req, res) => {
 
     const job =
@@ -1235,6 +1380,7 @@ app.use(
     }
 
     next();
+
   }
 );
 
