@@ -79,22 +79,31 @@ async function requireAuth(
   next
 ) {
   try {
+    let token = "";
+
     const authorization =
       req.headers.authorization || "";
 
     if (
-      !authorization.startsWith(
+      authorization.startsWith(
         "Bearer "
       )
     ) {
+      token =
+        authorization.substring(7);
+    }
+
+    if (!token) {
+      token =
+        req.query.token || "";
+    }
+
+    if (!token) {
       return res.status(401).json({
         error:
           "Não autenticado."
       });
     }
-
-    const token =
-      authorization.substring(7);
 
     if (!token) {
       return res.status(401).json({
