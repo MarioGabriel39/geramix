@@ -55,6 +55,18 @@ await Promise.all([
 app.use(
   express.static(PUBLIC)
 );
+app.get(
+  "/api/config",
+  (_, res) => {
+    res.json({
+      supabaseUrl:
+        SUPABASE_URL,
+
+      supabaseAnonKey:
+        SUPABASE_ANON_KEY
+    });
+  }
+);
 
 
 /* =========================================================
