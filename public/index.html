@@ -379,7 +379,6 @@ button:disabled{
 
 </section>
 
-
 <section class="card">
 
   <h2>2. Corpos</h2>
@@ -402,7 +401,6 @@ button:disabled{
   <div id="bl" class="files"></div>
 
 </section>
-
 
 <section class="card">
 
@@ -427,7 +425,6 @@ button:disabled{
 
 </section>
 
-
 <section class="card">
 
   <h2>Gerar vídeos</h2>
@@ -451,26 +448,21 @@ button:disabled{
 
   </div>
 
-
   <div style="text-align:center;margin-top:10px">
     Total: <b id="total">0</b> vídeos
   </div>
-
 
   <button id="go">
     Gerar vídeos MP4
   </button>
 
-
   <div class="progress">
     <div id="bar" class="bar"></div>
   </div>
 
-
   <div id="status" class="status">
     Verificando sessão…
   </div>
-
 
   <a
     id="download"
@@ -481,12 +473,9 @@ button:disabled{
     ⬇ Baixar todos em ZIP
   </a>
 
-
   <div id="originalitySummary"></div>
 
-
   <div id="result" class="result"></div>
-
 
   <div class="note">
     O índice de originalidade mostra a variação estrutural
@@ -499,9 +488,7 @@ button:disabled{
 
 </main>
 
-
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-
 
 <script>
 
@@ -511,9 +498,11 @@ button:disabled{
 
 let supabaseClient = null;
 
+let authReady = false;
+
 
 /* =========================================================
-   CONFIGURAÇÃO
+   CONFIGURAÇÃO / LOGIN
    ========================================================= */
 
 async function initializeAuth(){
@@ -534,7 +523,7 @@ async function initializeAuth(){
     ){
 
       throw new Error(
-        "Não foi possível carregar a configuração."
+        "Não foi possível carregar a configuração do servidor."
       );
 
     }
@@ -556,10 +545,25 @@ async function initializeAuth(){
     }
 
 
+    /*
+       IMPORTANTE:
+
+       Mantemos a sessão no navegador,
+       permitimos renovação automática
+       e usamos a mesma sessão em toda a página.
+    */
+
     supabaseClient =
       window.supabase.createClient(
         config.supabaseUrl,
-        config.supabaseAnonKey
+        config.supabaseAnonKey,
+        {
+          auth:{
+            persistSession:true,
+            autoRefreshToken:true,
+            detectSessionInUrl:true
+          }
+        }
       );
 
 
@@ -571,6 +575,11 @@ async function initializeAuth(){
       result.error
     ){
 
+      console.error(
+        "Erro ao recuperar sessão:",
+        result.error
+      );
+
       throw result.error;
 
     }
@@ -579,6 +588,11 @@ async function initializeAuth(){
     let session =
       result.data?.session;
 
+
+    /*
+       Se não encontrou sessão,
+       tenta renovar uma vez.
+    */
 
     if(
       !session
@@ -591,6 +605,11 @@ async function initializeAuth(){
       if(
         refresh.error
       ){
+
+        console.error(
+          "Erro ao renovar sessão na inicialização:",
+          refresh.error
+        );
 
         window.location.href =
           "/login.html";
@@ -607,7 +626,8 @@ async function initializeAuth(){
 
 
     if(
-      !session
+      !session ||
+      !session.access_token
     ){
 
       window.location.href =
@@ -618,6 +638,9 @@ async function initializeAuth(){
     }
 
 
+    authReady = true;
+
+
     return true;
 
   }catch(error){
@@ -625,11 +648,6 @@ async function initializeAuth(){
     console.error(
       "Erro ao iniciar autenticação:",
       error
-    );
-
-
-    alert(
-      "Sua sessão não pôde ser verificada. Faça login novamente."
     );
 
 
@@ -645,7 +663,7 @@ async function initializeAuth(){
 
 
 /* =========================================================
-   RENOVA A SESSÃO
+   RENOVA SESSÃO
    ========================================================= */
 
 async function refreshAuthSession(){
@@ -666,15 +684,26 @@ async function refreshAuthSession(){
 
 
     if(
-      result.error ||
-      !result.data?.session
+      result.error
     ){
 
       console.error(
-        "Falha ao renovar sessão:",
+        "Erro Supabase ao renovar sessão:",
         result.error
       );
 
+      return false;
+
+    }
+
+
+    if(
+      !result.data?.session?.access_token
+    ){
+
+      console.error(
+        "Supabase renovou sem devolver uma sessão válida."
+      );
 
       return false;
 
@@ -690,7 +719,6 @@ async function refreshAuthSession(){
       error
     );
 
-
     return false;
 
   }
@@ -699,7 +727,7 @@ async function refreshAuthSession(){
 
 
 /* =========================================================
-   TOKEN ATUAL
+   OBTÉM TOKEN
    ========================================================= */
 
 async function getAuthToken(
@@ -711,11 +739,37 @@ async function getAuthToken(
   ){
 
     throw new Error(
-      "Sessão ainda não foi inicializada."
+      "Autenticação ainda não foi inicializada."
     );
 
   }
 
+
+  if(
+    !authReady
+  ){
+
+    const initialized =
+      await initializeAuth();
+
+
+    if(
+      !initialized
+    ){
+
+      throw new Error(
+        "Não foi possível confirmar o login."
+      );
+
+    }
+
+  }
+
+
+  /*
+     Se foi solicitado refresh,
+     tenta renovar.
+  */
 
   if(
     forceRefresh
@@ -730,7 +784,7 @@ async function getAuthToken(
     ){
 
       throw new Error(
-        "Sessão inválida ou expirada."
+        "Não foi possível renovar sua sessão. Faça login novamente."
       );
 
     }
@@ -746,7 +800,14 @@ async function getAuthToken(
     result.error
   ){
 
-    throw result.error;
+    console.error(
+      "Erro ao obter sessão:",
+      result.error
+    );
+
+    throw new Error(
+      "Não foi possível acessar sua sessão."
+    );
 
   }
 
@@ -755,8 +816,14 @@ async function getAuthToken(
     result.data?.session;
 
 
+  /*
+     Se não houver sessão,
+     tenta renovar.
+  */
+
   if(
-    !session
+    !session ||
+    !session.access_token
   ){
 
     const refreshed =
@@ -768,7 +835,7 @@ async function getAuthToken(
     ){
 
       throw new Error(
-        "Sessão inválida ou expirada."
+        "Sua sessão não está disponível. Faça login novamente."
       );
 
     }
@@ -782,7 +849,14 @@ async function getAuthToken(
       result.error
     ){
 
-      throw result.error;
+      console.error(
+        "Erro após renovação:",
+        result.error
+      );
+
+      throw new Error(
+        "Não foi possível recuperar sua sessão."
+      );
 
     }
 
@@ -794,19 +868,20 @@ async function getAuthToken(
 
 
   if(
-    !session?.access_token
+    !session ||
+    !session.access_token
   ){
 
     throw new Error(
-      "Sessão inválida ou expirada."
+      "Sua sessão não está disponível. Faça login novamente."
     );
 
   }
 
 
   /*
-     Se o token estiver a menos de 60 segundos
-     de expirar, renova automaticamente.
+     Se estiver muito perto de expirar,
+     renova antes de enviar ao servidor.
   */
 
   if(
@@ -826,8 +901,7 @@ async function getAuthToken(
 
 
     if(
-      expiresAt <=
-      now + 60
+      expiresAt <= now + 60
     ){
 
       const refreshed =
@@ -835,44 +909,38 @@ async function getAuthToken(
 
 
       if(
-        !refreshed
+        refreshed
       ){
 
-        throw new Error(
-          "Sessão inválida ou expirada."
-        );
-
-      }
+        result =
+          await supabaseClient.auth.getSession();
 
 
-      result =
-        await supabaseClient.auth.getSession();
+        if(
+          !result.error &&
+          result.data?.session?.access_token
+        ){
 
+          session =
+            result.data.session;
 
-      if(
-        result.error
-      ){
-
-        throw result.error;
-
-      }
-
-
-      session =
-        result.data?.session;
-
-
-      if(
-        !session?.access_token
-      ){
-
-        throw new Error(
-          "Sessão inválida ou expirada."
-        );
+        }
 
       }
 
     }
+
+  }
+
+
+  if(
+    !session ||
+    !session.access_token
+  ){
+
+    throw new Error(
+      "Sua sessão expirou. Faça login novamente."
+    );
 
   }
 
@@ -883,7 +951,7 @@ async function getAuthToken(
 
 
 /* =========================================================
-   CABEÇALHO DE AUTORIZAÇÃO
+   CABEÇALHO
    ========================================================= */
 
 async function authHeaders(
@@ -1105,54 +1173,39 @@ function renderOriginalitySummary(
       <div class="originality-summary">
 
         <div class="originality-summary-item">
-
           <div class="originality-summary-number">
             ${counts[100]}
           </div>
-
           <div class="originality-summary-label">
             100%
           </div>
-
         </div>
 
-
         <div class="originality-summary-item">
-
           <div class="originality-summary-number">
             ${counts[90]}
           </div>
-
           <div class="originality-summary-label">
             90%
           </div>
-
         </div>
 
-
         <div class="originality-summary-item">
-
           <div class="originality-summary-number">
             ${counts[80]}
           </div>
-
           <div class="originality-summary-label">
             80%
           </div>
-
         </div>
 
-
         <div class="originality-summary-item">
-
           <div class="originality-summary-number">
             ${counts[70]}
           </div>
-
           <div class="originality-summary-label">
             70%
           </div>
-
         </div>
 
       </div>
@@ -1233,7 +1286,6 @@ $("go").onclick =
         "Selecione pelo menos 1 vídeo em cada categoria."
       );
 
-
       return;
 
     }
@@ -1294,21 +1346,15 @@ $("go").onclick =
 
     $("status")
       .textContent =
-      "Atualizando sessão…";
+      "Verificando sessão…";
 
 
     try{
 
       /*
-         Aqui está a correção principal.
+         Usa o token atual.
 
-         Antes estava:
-         authHeaders(true)
-
-         Agora usamos a sessão atual.
-         A renovação só acontece automaticamente
-         quando o token realmente estiver próximo
-         de expirar.
+         NÃO força refresh toda vez.
       */
 
       let headers =
@@ -1334,13 +1380,20 @@ $("go").onclick =
 
 
       /*
-         Se o servidor responder 401,
-         tenta renovar a sessão e repete uma vez.
+         401 = servidor recusou o token.
+
+         Neste caso renovamos a sessão
+         e tentamos novamente uma única vez.
       */
 
       if(
         r.status === 401
       ){
+
+        $("status")
+          .textContent =
+          "Renovando sessão…";
+
 
         const refreshed =
           await refreshAuthSession();
@@ -1351,7 +1404,7 @@ $("go").onclick =
         ){
 
           throw new Error(
-            "Sessão inválida ou expirada. Faça login novamente."
+            "O servidor recusou sua sessão. Faça login novamente."
           );
 
         }
@@ -1431,7 +1484,7 @@ $("go").onclick =
 
 
             /*
-               Token expirou durante o processamento.
+               Se o token expirou durante o processamento.
             */
 
             if(
@@ -1447,7 +1500,7 @@ $("go").onclick =
               ){
 
                 throw new Error(
-                  "Sessão inválida ou expirada durante o processamento."
+                  "A sessão expirou durante o processamento. Faça login novamente."
                 );
 
               }
@@ -1560,7 +1613,6 @@ $("go").onclick =
                       ✓ ${escapeHtml(f.name)}
                     </b>
 
-
                     <div class="originality ${originalityClass(originality)}">
 
                       <small>
@@ -1570,7 +1622,6 @@ $("go").onclick =
                       ${originality}%
 
                     </div>
-
 
                     <video
                       class="preview"
@@ -1584,49 +1635,33 @@ $("go").onclick =
 
                     </video>
 
-
                     <span class="pill">
-
                       Gancho:
                       ${escapeHtml(f.hook)}
-
                     </span>
 
-
                     <span class="pill">
-
                       Corpo:
                       ${escapeHtml(f.body)}
-
                     </span>
-
 
                     <span class="pill">
-
                       CTA:
                       ${escapeHtml(f.cta)}
-
                     </span>
-
 
                     <br>
 
-
                     <span style="color:#aaa">
-
                       Combinação única #${f.index}
-
                     </span>
-
 
                     <a
                       class="single-download"
                       href="${videoUrl}"
                       download="${escapeHtml(f.name)}"
                     >
-
                       ⬇ Baixar este vídeo
-
                     </a>
 
                   </div>
@@ -1701,7 +1736,7 @@ $("go").onclick =
 
               throw new Error(
                 x.error ||
-                "Processamento falhou"
+                "Processamento falhou."
               );
 
             }
