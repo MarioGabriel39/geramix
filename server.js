@@ -220,7 +220,7 @@ app.get("/health", (_, res) => {
 
 const FFMPEG_CONCURRENCY = 1;
 
-const MAX_COMBINATIONS = 1000;
+const MAX_COMBINATIONS = 150;
 
 
 /* =========================================================
@@ -663,17 +663,17 @@ app.post(
   upload.fields([
     {
       name: "hooks",
-      maxCount: 10
+      maxCount: 5
     },
 
     {
       name: "bodies",
-      maxCount: 10
+      maxCount: 5
     },
 
     {
       name: "ctas",
-      maxCount: 10
+      maxCount: 6
     }
   ]),
 
@@ -918,9 +918,9 @@ app.post(
 
         /* ================================================
            4. PREPARA AS COMBINAÇÕES
-           
+
            IMPORTANTE:
-           Aqui NÃO criamos os 252 MP4.
+           Aqui NÃO criamos os 150 MP4.
            Apenas registramos as combinações.
            ================================================ */
 
@@ -1040,7 +1040,7 @@ app.post(
 
               /* ==========================================
                  SALVA SOMENTE OS DADOS
-                 
+
                  O MP4 NÃO É SALVO AQUI.
                  ========================================== */
 
@@ -1097,7 +1097,7 @@ app.post(
 
         /* ================================================
            6. FINALIZADO
-           
+
            O ZIP será montado quando o usuário clicar
            em baixar ZIP.
            ================================================ */
