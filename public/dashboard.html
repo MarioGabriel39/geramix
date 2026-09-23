@@ -1,1 +1,275 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dashboard — GeraMix</title>
 
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: Arial, sans-serif;
+      min-height: 100vh;
+      background: linear-gradient(135deg, #0f172a, #1e1b4b);
+      color: #fff;
+      padding: 20px;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 1100px;
+      margin: 0 auto;
+    }
+
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 15px;
+      margin-bottom: 30px;
+    }
+
+    .logo {
+      font-size: 28px;
+      font-weight: 800;
+    }
+
+    .subtitle {
+      color: #cbd5e1;
+      margin-top: 5px;
+      font-size: 14px;
+    }
+
+    .logout {
+      border: 0;
+      padding: 10px 16px;
+      border-radius: 10px;
+      background: #334155;
+      color: #fff;
+      cursor: pointer;
+      font-weight: 600;
+    }
+
+    .logout:hover {
+      background: #475569;
+    }
+
+    .welcome {
+      margin-bottom: 25px;
+    }
+
+    .welcome h1 {
+      font-size: 30px;
+      margin-bottom: 8px;
+    }
+
+    .welcome p {
+      color: #cbd5e1;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 18px;
+    }
+
+    .card {
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 18px;
+      padding: 22px;
+      backdrop-filter: blur(10px);
+    }
+
+    .card h2 {
+      font-size: 18px;
+      margin-bottom: 15px;
+    }
+
+    .plan {
+      font-size: 25px;
+      font-weight: 800;
+      margin-bottom: 8px;
+    }
+
+    .price {
+      color: #cbd5e1;
+      margin-bottom: 20px;
+    }
+
+    .usage {
+      font-size: 28px;
+      font-weight: 800;
+      margin-bottom: 8px;
+    }
+
+    .available {
+      color: #cbd5e1;
+    }
+
+    .actions {
+      margin-top: 18px;
+      display: grid;
+      gap: 12px;
+    }
+
+    .action {
+      display: block;
+      text-decoration: none;
+      text-align: center;
+      padding: 14px;
+      border-radius: 12px;
+      background: #6366f1;
+      color: #fff;
+      font-weight: 700;
+    }
+
+    .action:hover {
+      background: #818cf8;
+    }
+
+    .secondary {
+      background: #334155;
+    }
+
+    .secondary:hover {
+      background: #475569;
+    }
+
+    .status {
+      display: inline-block;
+      padding: 7px 12px;
+      border-radius: 999px;
+      background: #166534;
+      color: #dcfce7;
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    @media (max-width: 700px) {
+      body {
+        padding: 14px;
+      }
+
+      header {
+        align-items: flex-start;
+      }
+
+      .grid {
+        grid-template-columns: 1fr;
+      }
+
+      .welcome h1 {
+        font-size: 25px;
+      }
+
+      .logo {
+        font-size: 24px;
+      }
+    }
+  </style>
+</head>
+
+<body>
+
+  <div class="container">
+
+    <header>
+      <div>
+        <div class="logo">GeraMix</div>
+        <div class="subtitle">Seu painel de vídeos</div>
+      </div>
+
+      <button class="logout" id="logout">
+        Sair
+      </button>
+    </header>
+
+    <section class="welcome">
+      <h1>Olá! 👋</h1>
+      <p>Bem-vindo ao seu painel do GeraMix.</p>
+    </section>
+
+    <div class="grid">
+
+      <div class="card">
+        <h2>Seu plano</h2>
+
+        <div class="plan">
+          GeraMix
+        </div>
+
+        <div class="price">
+          R$ 29,90 / mês
+        </div>
+
+        <span class="status">
+          Assinatura ativa
+        </span>
+      </div>
+
+      <div class="card">
+        <h2>Uso mensal</h2>
+
+        <div class="usage">
+          303 / 1.000
+        </div>
+
+        <div class="available">
+          697 vídeos disponíveis
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Criar vídeos</h2>
+
+        <p class="subtitle">
+          Monte suas combinações de ganchos, corpos e CTAs.
+        </p>
+
+        <div class="actions">
+          <a
+            class="action"
+            href="/"
+          >
+            Criar vídeos
+          </a>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Minha conta</h2>
+
+        <p class="subtitle">
+          Em breve você poderá gerenciar sua conta e assinatura aqui.
+        </p>
+
+        <div class="actions">
+          <a
+            class="action secondary"
+            href="/"
+          >
+            Voltar ao GeraMix
+          </a>
+        </div>
+      </div>
+
+    </div>
+
+  </div>
+
+  <script>
+    document
+      .getElementById("logout")
+      .addEventListener("click", () => {
+        window.location.href = "/login.html";
+      });
+  </script>
+
+</body>
+</html>
