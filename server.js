@@ -1,1951 +1,1742 @@
-<!doctype html>
-<html lang="pt-BR">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-
-<title>GeraMix</title>
-
-<style>
-*{
-  box-sizing:border-box;
-}
-
-body{
-  margin:0;
-  min-height:100vh;
-  background:
-    radial-gradient(circle at 10% 0%, rgba(0,210,255,.13), transparent 30%),
-    radial-gradient(circle at 90% 10%, rgba(255,45,170,.12), transparent 28%),
-    #07080d;
-  color:#fff;
-  font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
-}
-
-main{
-  max-width:760px;
-  margin:auto;
-  padding:24px 14px 60px;
-}
-
-.logo{
-  font-size:32px;
-  font-weight:950;
-  letter-spacing:-1.5px;
-  background:linear-gradient(90deg,#20d9ff,#9b5cff,#ff3b9d);
-  -webkit-background-clip:text;
-  background-clip:text;
-  color:transparent;
-}
-
-.muted{
-  color:#969aaa;
-  font-size:13px;
-}
-
-.card{
-  background:
-    linear-gradient(145deg,rgba(255,255,255,.055),rgba(255,255,255,.018));
-  border:1px solid rgba(255,255,255,.10);
-  border-radius:22px;
-  padding:18px;
-  margin:14px 0;
-  box-shadow:
-    0 12px 35px rgba(0,0,0,.28),
-    inset 0 1px 0 rgba(255,255,255,.035);
-  backdrop-filter:blur(10px);
-}
-
-h2{
-  font-size:18px;
-  margin:0 0 5px;
-  font-weight:850;
-  letter-spacing:-.3px;
-}
-
-.pick{
-  display:block;
-  text-align:center;
-  border:1px dashed rgba(43,214,255,.45);
-  border-radius:15px;
-  padding:15px;
-  margin-top:13px;
-  font-weight:850;
-  background:
-    linear-gradient(135deg,rgba(20,210,255,.09),rgba(164,82,255,.07));
-  color:#f5f7ff;
-  transition:.2s;
-  cursor:pointer;
-}
-
-.pick:active{
-  transform:scale(.98);
-}
-
-input{
-  display:none;
-}
-
-.files{
-  margin-top:10px;
-}
-
-.file{
-  padding:9px 11px;
-  border-radius:10px;
-  background:rgba(255,255,255,.055);
-  border:1px solid rgba(255,255,255,.06);
-  margin:6px 0;
-  font-size:12px;
-  overflow:hidden;
-  text-overflow:ellipsis;
-  white-space:nowrap;
-  color:#dfe3f1;
-}
-
-.stats{
-  display:grid;
-  grid-template-columns:repeat(3,1fr);
-  gap:9px;
-  margin-top:13px;
-}
-
-.stat{
-  background:
-    linear-gradient(145deg,rgba(255,255,255,.065),rgba(255,255,255,.025));
-  border:1px solid rgba(255,255,255,.07);
-  border-radius:15px;
-  text-align:center;
-  padding:12px 8px;
-}
-
-.n{
-  font-size:23px;
-  font-weight:950;
-  background:linear-gradient(90deg,#25d9ff,#b15cff,#ff419f);
-  -webkit-background-clip:text;
-  background-clip:text;
-  color:transparent;
-}
-
-button,
-.download{
-  display:block;
-  width:100%;
-  padding:15px;
-  border:0;
-  border-radius:15px;
-  background:linear-gradient(
-    90deg,
-    #16d9ff 0%,
-    #8e5cff 52%,
-    #ff3b98 100%
-  );
-  color:#fff;
-  font-weight:950;
-  margin-top:13px;
-  font-size:15px;
-  text-align:center;
-  text-decoration:none;
-  box-shadow:
-    0 8px 24px rgba(123,82,255,.25);
-  cursor:pointer;
-  transition:.2s;
-}
-
-button:active,
-.download:active{
-  transform:scale(.98);
-}
-
-button:disabled{
-  opacity:.45;
-  cursor:not-allowed;
-  box-shadow:none;
-}
-
-.progress{
-  height:10px;
-  background:#1b1d27;
-  border-radius:20px;
-  overflow:hidden;
-  margin-top:13px;
-  border:1px solid rgba(255,255,255,.06);
-}
-
-.bar{
-  height:100%;
-  width:0%;
-  background:linear-gradient(
-    90deg,
-    #18d9ff,
-    #8d5cff,
-    #ff3c99
-  );
-  transition:.2s;
-}
-
-.status{
-  margin-top:9px;
-  font-size:13px;
-  color:#b8bdcc;
-}
-
-.result{
-  max-height:500px;
-  overflow:auto;
-  margin-top:13px;
-}
-
-.combo{
-  padding:14px 4px;
-  border-bottom:1px solid rgba(255,255,255,.08);
-  font-size:12px;
-}
-
-.pill{
-  display:inline-block;
-  background:rgba(255,255,255,.065);
-  border:1px solid rgba(255,255,255,.07);
-  border-radius:9px;
-  padding:5px 7px;
-  margin:3px 2px;
-  color:#d9deed;
-}
-
-.preview{
-  display:block;
-  width:100%;
-  max-height:520px;
-  margin-top:12px;
-  border-radius:15px;
-  background:#000;
-  border:1px solid rgba(255,255,255,.10);
-  object-fit:contain;
-  box-shadow:
-    0 8px 25px rgba(0,0,0,.30);
-}
-
-.single-download{
-  display:block;
-  width:100%;
-  margin-top:10px;
-  padding:10px 12px;
-  border-radius:11px;
-  text-align:center;
-  text-decoration:none;
-  font-size:13px;
-  font-weight:850;
-  color:#fff;
-  background:linear-gradient(
-    90deg,
-    rgba(22,217,255,.20),
-    rgba(142,92,255,.20),
-    rgba(255,59,152,.20)
-  );
-  border:1px solid rgba(255,255,255,.12);
-}
-
-.single-download:active{
-  transform:scale(.98);
-}
-
-.originality{
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  margin-top:12px;
-  padding:11px 12px;
-  border-radius:12px;
-  font-size:15px;
-  font-weight:950;
-  letter-spacing:.2px;
-  background:
-    linear-gradient(
-      135deg,
-      rgba(22,217,255,.12),
-      rgba(142,92,255,.12),
-      rgba(255,59,152,.12)
-    );
-  border:1px solid rgba(255,255,255,.12);
-}
-
-.originality small{
-  margin-right:7px;
-  color:#aeb4c5;
-  font-size:11px;
-  font-weight:700;
-}
-
-.originality.high{
-  color:#35e6a2;
-}
-
-.originality.medium{
-  color:#ffd45c;
-}
-
-.originality.low{
-  color:#ff7d8e;
-}
-
-.originality-summary{
-  display:grid;
-  grid-template-columns:repeat(4,1fr);
-  gap:7px;
-  margin-top:13px;
-}
-
-.originality-summary-item{
-  text-align:center;
-  padding:10px 5px;
-  border-radius:12px;
-  background:rgba(255,255,255,.045);
-  border:1px solid rgba(255,255,255,.07);
-}
-
-.originality-summary-number{
-  font-size:17px;
-  font-weight:950;
-}
-
-.originality-summary-label{
-  margin-top:3px;
-  color:#969aaa;
-  font-size:10px;
-}
-
-.note{
-  font-size:12px;
-  line-height:1.55;
-  color:#858b9c;
-  margin-top:13px;
-}
-
-.limit-note{
-  margin-top:8px;
-  font-size:11px;
-  color:#747a8b;
-}
-
-@media(max-width:480px){
-  main{
-    padding:20px 12px 50px;
-  }
-
-  .logo{
-    font-size:30px;
-  }
-
-  .card{
-    padding:16px;
-    border-radius:20px;
-  }
-
-  .preview{
-    max-height:500px;
-  }
-
-  .originality-summary{
-    grid-template-columns:repeat(2,1fr);
-  }
-}
-</style>
-</head>
-
-<body>
-
-<main>
-
-<div class="logo">GeraMix</div>
-
-<div class="muted">
-  Multiplicador de vídeos com processamento no servidor
-</div>
-
-
-<!-- =======================================================
-     GANCHOS
-     ======================================================= -->
-
-<section class="card">
-
-  <h2>1. Ganchos</h2>
-
-  <div class="muted">
-    Até 5 vídeos de abertura
-  </div>
-
-  <div class="limit-note">
-    Limite fixo: 5 vídeos
-  </div>
-
-  <label class="pick" for="hooks">
-    ＋ Selecionar vídeos
-  </label>
-
-  <input
-    id="hooks"
-    type="file"
-    accept="video/*"
-    multiple
-  >
-
-  <div id="hl" class="files"></div>
-
-</section>
-
-
-<!-- =======================================================
-     CORPOS
-     ======================================================= -->
-
-<section class="card">
-
-  <h2>2. Corpos</h2>
-
-  <div class="muted">
-    Até 5 vídeos principais
-  </div>
-
-  <div class="limit-note">
-    Limite fixo: 5 vídeos
-  </div>
-
-  <label class="pick" for="bodies">
-    ＋ Selecionar vídeos
-  </label>
-
-  <input
-    id="bodies"
-    type="file"
-    accept="video/*"
-    multiple
-  >
-
-  <div id="bl" class="files"></div>
-
-</section>
-
-
-<!-- =======================================================
-     CTAs
-     ======================================================= -->
-
-<section class="card">
-
-  <h2>3. CTAs</h2>
-
-  <div class="muted">
-    Até 6 vídeos finais
-  </div>
-
-  <div class="limit-note">
-    Limite fixo: 6 vídeos
-  </div>
-
-  <label class="pick" for="ctas">
-    ＋ Selecionar vídeos
-  </label>
-
-  <input
-    id="ctas"
-    type="file"
-    accept="video/*"
-    multiple
-  >
-
-  <div id="cl" class="files"></div>
-
-</section>
-
-
-<!-- =======================================================
-     GERAR
-     ======================================================= -->
-
-<section class="card">
-
-  <h2>Gerar vídeos</h2>
-
-  <div class="stats">
-
-    <div class="stat">
-      <div id="hn" class="n">0</div>
-      <div class="muted">Ganchos</div>
-    </div>
-
-    <div class="stat">
-      <div id="bn" class="n">0</div>
-      <div class="muted">Corpos</div>
-    </div>
-
-    <div class="stat">
-      <div id="cn" class="n">0</div>
-      <div class="muted">CTAs</div>
-    </div>
-
-  </div>
-
-
-  <div style="text-align:center;margin-top:10px">
-    Total: <b id="total">0</b> vídeos
-  </div>
-
-
-  <div
-    class="limit-note"
-    style="text-align:center"
-  >
-    Máximo fixo: 150 vídeos
-    (5 × 5 × 6)
-  </div>
-
-
-  <button id="go">
-    Gerar vídeos MP4
-  </button>
-
-
-  <div class="progress">
-    <div id="bar" class="bar"></div>
-  </div>
-
-
-  <div id="status" class="status">
-    Verificando sessão…
-  </div>
-
-
-  <a
-    id="download"
-    class="download"
-    style="display:none"
-    href="#"
-  >
-    ⬇ Baixar todos em ZIP
-  </a>
-
-
-  <div id="originalitySummary"></div>
-
-
-  <div id="result" class="result"></div>
-
-
-  <div class="note">
-    O índice de originalidade mostra a variação estrutural
-    entre as combinações do lote, considerando Gancho, Corpo
-    e CTA. Não representa uma garantia de originalidade perante
-    TikTok, Instagram, YouTube ou outras plataformas.
-  </div>
-
-</section>
-
-</main>
-
-
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-
-<script>
+import express from "express";
+import multer from "multer";
+import fs from "fs";
+import fsp from "fs/promises";
+import path from "path";
+import os from "os";
+import crypto from "crypto";
+import { spawn } from "child_process";
+import archiver from "archiver";
+import ffmpegPath from "ffmpeg-static";
+
+const app = express();
+
+const PORT = process.env.PORT || 3000;
+const ROOT = process.cwd();
+const PUBLIC = path.join(ROOT, "public");
+
+const BASE = path.join(os.tmpdir(), "geramix");
+const UPLOADS = path.join(BASE, "uploads");
+const JOBS = path.join(BASE, "jobs");
 
 /* =========================================================
    SUPABASE
-   ========================================================= */
+========================================================= */
 
-let supabaseClient = null;
+const SUPABASE_URL =
+  process.env.SUPABASE_URL;
 
-let authReady = false;
+const SUPABASE_ANON_KEY =
+  process.env.SUPABASE_ANON_KEY;
 
+if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+  throw new Error(
+    "SUPABASE_URL e SUPABASE_ANON_KEY precisam estar configuradas no Render."
+  );
+}
 
 /* =========================================================
-   CONFIGURAÇÃO / LOGIN
-   ========================================================= */
+   DIRETÓRIOS
+========================================================= */
 
-async function initializeAuth(){
+await Promise.all([
+  fsp.mkdir(UPLOADS, { recursive: true }),
+  fsp.mkdir(JOBS, { recursive: true })
+]);
 
-  try{
+/* =========================================================
+   ARQUIVOS PÚBLICOS
+========================================================= */
 
-    const configResponse =
+app.use(express.static(PUBLIC));
+
+/* =========================================================
+   CONFIGURAÇÃO DO FRONT-END
+========================================================= */
+
+app.get("/api/config", (_, res) => {
+  res.setHeader(
+    "Cache-Control",
+    "no-store"
+  );
+
+  res.json({
+    supabaseUrl: SUPABASE_URL,
+    supabaseAnonKey: SUPABASE_ANON_KEY
+  });
+});
+
+/* =========================================================
+   AUTENTICAÇÃO
+========================================================= */
+
+async function requireAuth(req, res, next) {
+  try {
+    const authorization =
+      String(
+        req.headers.authorization || ""
+      ).trim();
+
+    let token = "";
+
+    if (
+      authorization
+        .toLowerCase()
+        .startsWith("bearer ")
+    ) {
+      token =
+        authorization
+          .slice(7)
+          .trim();
+    }
+
+    if (!token) {
+      token =
+        String(
+          req.query.token || ""
+        ).trim();
+    }
+
+    if (!token) {
+      console.error(
+        "GeraMix: nenhuma sessão foi enviada."
+      );
+
+      return res.status(401).json({
+        error:
+          "Sessão não enviada."
+      });
+    }
+
+    if (token.startsWith("sb_")) {
+      console.error(
+        "GeraMix: Publishable Key recebida no lugar do token do usuário."
+      );
+
+      return res.status(401).json({
+        error:
+          "Token de usuário inválido."
+      });
+    }
+
+    const response =
       await fetch(
-        "/api/config",
+        `${SUPABASE_URL}/auth/v1/user`,
         {
-          cache:"no-store"
-        }
-      );
+          method: "GET",
 
+          headers: {
+            Authorization:
+              `Bearer ${token}`,
 
-    if(
-      !configResponse.ok
-    ){
-
-      throw new Error(
-        "Não foi possível carregar a configuração do servidor."
-      );
-
-    }
-
-
-    const config =
-      await configResponse.json();
-
-
-    if(
-      !config.supabaseUrl ||
-      !config.supabaseAnonKey
-    ){
-
-      throw new Error(
-        "Configuração do Supabase incompleta."
-      );
-
-    }
-
-
-    supabaseClient =
-      window.supabase.createClient(
-        config.supabaseUrl,
-        config.supabaseAnonKey,
-        {
-          auth:{
-            persistSession:true,
-            autoRefreshToken:true,
-            detectSessionInUrl:true
+            apikey:
+              SUPABASE_ANON_KEY
           }
         }
       );
 
+    if (!response.ok) {
+      let details = "";
 
-    let result =
-      await supabaseClient.auth.getSession();
+      try {
+        const data =
+          await response.json();
 
-
-    if(
-      result.error
-    ){
+        details =
+          data?.msg ||
+          data?.message ||
+          data?.error_description ||
+          data?.error ||
+          "";
+      } catch {
+        details = "";
+      }
 
       console.error(
-        "Erro ao recuperar sessão:",
-        result.error
+        "GeraMix: Supabase recusou o token.",
+        response.status,
+        details
       );
 
-      throw result.error;
-
+      return res.status(401).json({
+        error:
+          "Sessão inválida ou expirada."
+      });
     }
 
+    const user =
+      await response.json();
 
-    let session =
-      result.data?.session;
+    if (!user || !user.id) {
+      console.error(
+        "GeraMix: Supabase respondeu sem usuário."
+      );
 
+      return res.status(401).json({
+        error:
+          "Sessão inválida ou expirada."
+      });
+    }
 
-    if(
-      !session
-    ){
+    req.user = user;
 
-      const refresh =
-        await supabaseClient.auth.refreshSession();
+    next();
 
+  } catch (error) {
+    console.error(
+      "Erro ao validar sessão:",
+      error
+    );
 
-      if(
-        refresh.error
-      ){
+    return res.status(401).json({
+      error:
+        "Não foi possível validar sua sessão."
+    });
+  }
+}
 
-        console.error(
-          "Erro ao renovar sessão na inicialização:",
-          refresh.error
+/* =========================================================
+   HEALTH
+========================================================= */
+
+app.get("/health", (_, res) => {
+  res.json({
+    ok: true,
+    service: "geramix",
+    ffmpeg: Boolean(ffmpegPath)
+  });
+});
+
+/* =========================================================
+   CONFIGURAÇÕES
+========================================================= */
+
+const FFMPEG_CONCURRENCY = 1;
+
+const MAX_COMBINATIONS = 150;
+
+/* =========================================================
+   FFMPEG
+========================================================= */
+
+function runFFmpeg(args, cwd) {
+  return new Promise(
+    (resolve, reject) => {
+
+      const p =
+        spawn(
+          ffmpegPath,
+          [
+            "-hide_banner",
+            "-loglevel",
+            "error",
+
+            "-threads",
+            "1",
+
+            ...args
+          ],
+          {
+            cwd
+          }
         );
 
-        window.location.href =
-          "/login.html";
+      let err = "";
 
-        return false;
+      p.stderr.on(
+        "data",
+        data => {
+          err += data.toString();
 
-      }
-
-
-      session =
-        refresh.data?.session;
-
-    }
-
-
-    if(
-      !session ||
-      !session.access_token
-    ){
-
-      window.location.href =
-        "/login.html";
-
-      return false;
-
-    }
-
-
-    authReady = true;
-
-
-    return true;
-
-  }catch(error){
-
-    console.error(
-      "Erro ao iniciar autenticação:",
-      error
-    );
-
-
-    window.location.href =
-      "/login.html";
-
-
-    return false;
-
-  }
-
-}
-
-
-/* =========================================================
-   RENOVA SESSÃO
-   ========================================================= */
-
-async function refreshAuthSession(){
-
-  if(
-    !supabaseClient
-  ){
-
-    return false;
-
-  }
-
-
-  try{
-
-    const result =
-      await supabaseClient.auth.refreshSession();
-
-
-    if(
-      result.error
-    ){
-
-      console.error(
-        "Erro Supabase ao renovar sessão:",
-        result.error
+          if (err.length > 10000) {
+            err =
+              err.slice(-10000);
+          }
+        }
       );
 
-      return false;
-
-    }
-
-
-    if(
-      !result.data?.session?.access_token
-    ){
-
-      console.error(
-        "Supabase renovou sem devolver uma sessão válida."
+      p.on(
+        "error",
+        reject
       );
 
-      return false;
-
-    }
-
-
-    return true;
-
-  }catch(error){
-
-    console.error(
-      "Erro ao renovar sessão:",
-      error
-    );
-
-    return false;
-
-  }
-
-}
-
-
-/* =========================================================
-   OBTÉM TOKEN
-   ========================================================= */
-
-async function getAuthToken(
-  forceRefresh = false
-){
-
-  if(
-    !supabaseClient
-  ){
-
-    throw new Error(
-      "Autenticação ainda não foi inicializada."
-    );
-
-  }
-
-
-  if(
-    !authReady
-  ){
-
-    const initialized =
-      await initializeAuth();
-
-
-    if(
-      !initialized
-    ){
-
-      throw new Error(
-        "Não foi possível confirmar o login."
-      );
-
-    }
-
-  }
-
-
-  if(
-    forceRefresh
-  ){
-
-    const refreshed =
-      await refreshAuthSession();
-
-
-    if(
-      !refreshed
-    ){
-
-      throw new Error(
-        "Não foi possível renovar sua sessão. Faça login novamente."
-      );
-
-    }
-
-  }
-
-
-  let result =
-    await supabaseClient.auth.getSession();
-
-
-  if(
-    result.error
-  ){
-
-    console.error(
-      "Erro ao obter sessão:",
-      result.error
-    );
-
-    throw new Error(
-      "Não foi possível acessar sua sessão."
-    );
-
-  }
-
-
-  let session =
-    result.data?.session;
-
-
-  if(
-    !session ||
-    !session.access_token
-  ){
-
-    const refreshed =
-      await refreshAuthSession();
-
-
-    if(
-      !refreshed
-    ){
-
-      throw new Error(
-        "Sua sessão não está disponível. Faça login novamente."
-      );
-
-    }
-
-
-    result =
-      await supabaseClient.auth.getSession();
-
-
-    if(
-      result.error
-    ){
-
-      console.error(
-        "Erro após renovação:",
-        result.error
-      );
-
-      throw new Error(
-        "Não foi possível recuperar sua sessão."
-      );
-
-    }
-
-
-    session =
-      result.data?.session;
-
-  }
-
-
-  if(
-    !session ||
-    !session.access_token
-  ){
-
-    throw new Error(
-      "Sua sessão não está disponível. Faça login novamente."
-    );
-
-  }
-
-
-  if(
-    session.expires_at
-  ){
-
-    const expiresAt =
-      Number(
-        session.expires_at
-      );
-
-
-    const now =
-      Math.floor(
-        Date.now() / 1000
-      );
-
-
-    if(
-      expiresAt <= now + 60
-    ){
-
-      const refreshed =
-        await refreshAuthSession();
-
-
-      if(
-        refreshed
-      ){
-
-        result =
-          await supabaseClient.auth.getSession();
-
-
-        if(
-          !result.error &&
-          result.data?.session?.access_token
-        ){
-
-          session =
-            result.data.session;
+      p.on(
+        "close",
+        code => {
+
+          if (code === 0) {
+            resolve();
+          } else {
+            reject(
+              new Error(
+                err.trim() ||
+                `FFmpeg saiu com código ${code}`
+              )
+            );
+          }
 
         }
-
-      }
-
-    }
-
-  }
-
-
-  if(
-    !session ||
-    !session.access_token
-  ){
-
-    throw new Error(
-      "Sua sessão expirou. Faça login novamente."
-    );
-
-  }
-
-
-  return session.access_token;
-
-}
-
-
-/* =========================================================
-   CABEÇALHO
-   ========================================================= */
-
-async function authHeaders(
-  forceRefresh = false
-){
-
-  const token =
-    await getAuthToken(
-      forceRefresh
-    );
-
-
-  return {
-    "Authorization":
-      "Bearer " + token
-  };
-
-}
-
-
-/* =========================================================
-   DADOS
-   ========================================================= */
-
-const D = {
-  h:[],
-  b:[],
-  c:[]
-};
-
-
-const $ = id =>
-  document.getElementById(id);
-
-
-/* =========================================================
-   LISTA DE ARQUIVOS
-   ========================================================= */
-
-/*
-   AQUI ESTÁ O TRAVAMENTO:
-
-   hooks  = 5
-   bodies = 5
-   ctas   = 6
-
-   Se passar do limite, os arquivos NÃO entram no sistema.
-*/
-
-function setup(
-  id,
-  k,
-  list,
-  max
-){
-
-  $(id).onchange = e => {
-
-    const selected =
-      [
-        ...e.target.files
-      ];
-
-
-    if(
-      selected.length > max
-    ){
-
-      alert(
-        `Você pode selecionar no máximo ${max} vídeos nesta categoria.`
       );
 
-
-      e.target.value = "";
-
-
-      D[k] = [];
-
-
-      $(list).innerHTML = "";
-
-
-      update();
-
-
-      return;
-
     }
-
-
-    D[k] =
-      selected;
-
-
-    $(list).innerHTML =
-      D[k]
-        .map(
-          (f,i) =>
-            `<div class="file">${i + 1}. ${escapeHtml(f.name)}</div>`
-        )
-        .join("");
-
-
-    update();
-
-  };
-
+  );
 }
-
 
 /* =========================================================
-   ESCAPA HTML
-   ========================================================= */
+   VERIFICA ÁUDIO
+========================================================= */
 
-function escapeHtml(
-  value
-){
+async function hasAudio(input, cwd) {
+  try {
 
-  return String(value)
-    .replace(
-      /&/g,
-      "&amp;"
-    )
-    .replace(
-      /</g,
-      "&lt;"
-    )
-    .replace(
-      />/g,
-      "&gt;"
-    )
-    .replace(
-      /"/g,
-      "&quot;"
-    )
-    .replace(
-      /'/g,
-      "&#039;"
+    await runFFmpeg(
+      [
+        "-i",
+        input,
+
+        "-map",
+        "0:a:0",
+
+        "-frames:a",
+        "0",
+
+        "-f",
+        "null",
+
+        "-"
+      ],
+      cwd
     );
 
-}
+    return true;
 
+  } catch {
+    return false;
+  }
+}
 
 /* =========================================================
-   CONTADORES
-   ========================================================= */
+   NORMALIZA UM VÍDEO UMA ÚNICA VEZ
+========================================================= */
 
-function update(){
+async function normalizeVideo(
+  input,
+  output,
+  cwd
+) {
 
-  $("hn").textContent =
-    D.h.length;
-
-
-  $("bn").textContent =
-    D.b.length;
-
-
-  $("cn").textContent =
-    D.c.length;
-
-
-  const total =
-    D.h.length *
-    D.b.length *
-    D.c.length;
-
-
-  $("total").textContent =
-    total.toLocaleString(
-      "pt-BR"
+  const audio =
+    await hasAudio(
+      input,
+      cwd
     );
 
+  const args = [
+    "-i",
+    input
+  ];
 
-  /*
-     Segurança extra:
-     mesmo que alguma alteração futura
-     tente passar de 150, o botão não deixa gerar.
-  */
+  if (!audio) {
+    args.push(
+      "-f",
+      "lavfi",
+      "-i",
+      "anullsrc=r=48000:cl=stereo"
+    );
+  }
 
-  $("go").disabled =
-    total > 150;
+  args.push(
+    "-map",
+    "0:v:0",
 
+    "-map",
+    audio
+      ? "0:a:0"
+      : "1:a:0",
+
+    "-vf",
+    "scale=720:1280:force_original_aspect_ratio=decrease," +
+      "pad=720:1280:(ow-iw)/2:(oh-ih)/2," +
+      "setsar=1," +
+      "fps=30," +
+      "format=yuv420p",
+
+    "-c:v",
+    "libx264",
+
+    "-preset",
+    "ultrafast",
+
+    "-crf",
+    "28",
+
+    "-pix_fmt",
+    "yuv420p",
+
+    "-r",
+    "30",
+
+    "-c:a",
+    "aac",
+
+    "-ar",
+    "48000",
+
+    "-ac",
+    "2",
+
+    "-b:a",
+    "96k",
+
+    "-shortest",
+
+    "-y",
+    output
+  );
+
+  await runFFmpeg(
+    args,
+    cwd
+  );
 }
 
+/* =========================================================
+   JUNTA 3 VÍDEOS NORMALIZADOS
+========================================================= */
+
+async function concatNormalized(
+  files,
+  output,
+  cwd
+) {
+
+  const listFile =
+    path.join(
+      cwd,
+      `concat-${crypto.randomUUID()}.txt`
+    );
+
+  const content =
+    files
+      .map(
+        file =>
+          `file '${path.basename(file).replace(/'/g, "'\\''")}'`
+      )
+      .join("\n");
+
+  await fsp.writeFile(
+    listFile,
+    content,
+    "utf8"
+  );
+
+  try {
+
+    await runFFmpeg(
+      [
+        "-f",
+        "concat",
+
+        "-safe",
+        "0",
+
+        "-i",
+        listFile,
+
+        "-c",
+        "copy",
+
+        "-y",
+        output
+      ],
+      cwd
+    );
+
+  } finally {
+
+    await fsp.rm(
+      listFile,
+      {
+        force: true
+      }
+    );
+
+  }
+}
+
+/* =========================================================
+   NOME SEGURO
+========================================================= */
+
+function safeName(name) {
+  return String(
+    name || "video"
+  )
+    .replace(
+      /[^a-zA-Z0-9.*-]/g,
+      "*"
+    )
+    .slice(-100);
+}
 
 /* =========================================================
    ORIGINALIDADE
-   ========================================================= */
+========================================================= */
 
-function originalityClass(
-  value
-){
+function calculateOriginality(
+  current,
+  previous
+) {
 
-  if(
-    value >= 90
-  ){
-
-    return "high";
-
+  if (!previous) {
+    return 100;
   }
 
+  let different = 0;
 
-  if(
-    value >= 80
-  ){
-
-    return "medium";
-
+  if (
+    current.hook.path !==
+    previous.hook.path
+  ) {
+    different++;
   }
 
+  if (
+    current.body.path !==
+    previous.body.path
+  ) {
+    different++;
+  }
 
-  return "low";
+  if (
+    current.cta.path !==
+    previous.cta.path
+  ) {
+    different++;
+  }
 
+  return 70 + different * 10;
 }
 
+/* =========================================================
+   UPLOAD
+========================================================= */
+
+const upload =
+  multer({
+    dest: UPLOADS,
+
+    limits: {
+      files: 30,
+
+      fileSize:
+        200 * 1024 * 1024
+    }
+  });
 
 /* =========================================================
-   RESUMO
-   ========================================================= */
+   JOBS
+========================================================= */
 
-function renderOriginalitySummary(
-  files
-){
+const jobs = new Map();
 
-  if(
-    !files.length
-  ){
+/* =========================================================
+   OBTÉM OS VÍDEOS NORMALIZADOS DE UMA COMBINAÇÃO
+========================================================= */
 
-    $("originalitySummary")
-      .innerHTML = "";
+function getCombinationFiles(
+  job,
+  file
+) {
 
+  const dir =
+    path.join(
+      JOBS,
+      job.id
+    );
 
-    return;
+  const hook =
+    path.join(
+      dir,
+      `hook-${String(file.hookIndex).padStart(3, "0")}.mp4`
+    );
 
-  }
+  const body =
+    path.join(
+      dir,
+      `body-${String(file.bodyIndex).padStart(3, "0")}.mp4`
+    );
 
+  const cta =
+    path.join(
+      dir,
+      `cta-${String(file.ctaIndex).padStart(3, "0")}.mp4`
+    );
 
-  const counts = {
-    100:0,
-    90:0,
-    80:0,
-    70:0
-  };
+  return [
+    hook,
+    body,
+    cta
+  ];
+}
 
+/* =========================================================
+   CRIA UM VÍDEO TEMPORÁRIO SOB DEMANDA
+========================================================= */
 
-  files.forEach(
-    file => {
+async function createVideoForJob(
+  job,
+  file
+) {
 
-      const value =
-        Number(
-          file.originality
-        );
+  const dir =
+    path.join(
+      JOBS,
+      job.id
+    );
 
+  const tempName =
+    `temp-${crypto.randomUUID()}.mp4`;
 
-      if(
-        Object.prototype.hasOwnProperty.call(
-          counts,
-          value
-        )
-      ){
+  const output =
+    path.join(
+      dir,
+      tempName
+    );
 
-        counts[value]++;
+  const sources =
+    getCombinationFiles(
+      job,
+      file
+    );
 
+  try {
+
+    await concatNormalized(
+      sources,
+      output,
+      dir
+    );
+
+    return output;
+
+  } catch (error) {
+
+    await fsp.rm(
+      output,
+      {
+        force: true
       }
+    );
 
-    }
-  );
-
-
-  $("originalitySummary")
-    .innerHTML = `
-
-      <div class="originality-summary">
-
-        <div class="originality-summary-item">
-          <div class="originality-summary-number">
-            ${counts[100]}
-          </div>
-
-          <div class="originality-summary-label">
-            100%
-          </div>
-        </div>
-
-
-        <div class="originality-summary-item">
-          <div class="originality-summary-number">
-            ${counts[90]}
-          </div>
-
-          <div class="originality-summary-label">
-            90%
-          </div>
-        </div>
-
-
-        <div class="originality-summary-item">
-          <div class="originality-summary-number">
-            ${counts[80]}
-          </div>
-
-          <div class="originality-summary-label">
-            80%
-          </div>
-        </div>
-
-
-        <div class="originality-summary-item">
-          <div class="originality-summary-number">
-            ${counts[70]}
-          </div>
-
-          <div class="originality-summary-label">
-            70%
-          </div>
-        </div>
-
-      </div>
-
-  `;
-
+    throw error;
+  }
 }
 
-
 /* =========================================================
-   URL AUTENTICADA
-   ========================================================= */
+   CRIA JOB
+========================================================= */
 
-async function createAuthenticatedVideoUrl(
-  jobId,
-  fileName
-){
+app.post(
+  "/api/jobs",
 
-  const token =
-    await getAuthToken();
+  requireAuth,
 
+  upload.fields([
+    {
+      name: "hooks",
+      maxCount: 5
+    },
 
-  return (
-    "/api/jobs/" +
-    encodeURIComponent(
-      jobId
-    ) +
-    "/video/" +
-    encodeURIComponent(
-      fileName
-    ) +
-    "?token=" +
-    encodeURIComponent(
-      token
-    )
-  );
+    {
+      name: "bodies",
+      maxCount: 5
+    },
 
-}
-
-
-/* =========================================================
-   SELETORES COM LIMITE CRAVADO
-   ========================================================= */
-
-setup(
-  "hooks",
-  "h",
-  "hl",
-  5
-);
-
-
-setup(
-  "bodies",
-  "b",
-  "bl",
-  5
-);
-
-
-setup(
-  "ctas",
-  "c",
-  "cl",
-  6
-);
-
-
-/* =========================================================
-   GERAR
-   ========================================================= */
-
-$("go").onclick =
-  async () => {
-
-    if(
-      !D.h.length ||
-      !D.b.length ||
-      !D.c.length
-    ){
-
-      alert(
-        "Selecione pelo menos 1 vídeo em cada categoria."
-      );
-
-      return;
-
+    {
+      name: "ctas",
+      maxCount: 6
     }
+  ]),
 
+  async (req, res) => {
 
-    /*
-       SEGURANÇA EXTRA:
+    const hooks =
+      req.files?.hooks || [];
 
-       5 × 5 × 6 = 150
+    const bodies =
+      req.files?.bodies || [];
 
-       Se por qualquer motivo houver uma
-       quantidade diferente, não envia.
-    */
+    const ctas =
+      req.files?.ctas || [];
 
-    if(
-      D.h.length > 5 ||
-      D.b.length > 5 ||
-      D.c.length > 6
-    ){
+    if (
+      !hooks.length ||
+      !bodies.length ||
+      !ctas.length
+    ) {
 
-      alert(
-        "O limite é de 5 ganchos, 5 corpos e 6 CTAs."
-      );
-
-      return;
-
+      return res.status(400).json({
+        error:
+          "Envie pelo menos 1 vídeo em cada categoria."
+      });
     }
-
 
     const total =
-      D.h.length *
-      D.b.length *
-      D.c.length;
+      hooks.length *
+      bodies.length *
+      ctas.length;
 
+    if (
+      total >
+      MAX_COMBINATIONS
+    ) {
 
-    if(
-      total > 150
-    ){
-
-      alert(
-        "O limite máximo é de 150 vídeos por lote."
-      );
-
-      return;
-
+      return res.status(400).json({
+        error:
+          `Limite de ${MAX_COMBINATIONS} combinações por lote.`
+      });
     }
 
+    const id =
+      crypto.randomUUID();
 
-    const fd =
-      new FormData();
+    const dir =
+      path.join(
+        JOBS,
+        id
+      );
 
-
-    D.h.forEach(
-      f =>
-        fd.append(
-          "hooks",
-          f
-        )
+    await fsp.mkdir(
+      dir,
+      {
+        recursive: true
+      }
     );
 
+    const job = {
+      id,
 
-    D.b.forEach(
-      f =>
-        fd.append(
-          "bodies",
-          f
-        )
+      userId:
+        req.user.id,
+
+      status:
+        "processing",
+
+      total,
+
+      done:
+        0,
+
+      current:
+        "Iniciando…",
+
+      files: [],
+
+      error:
+        null,
+
+      mode:
+        "montagem-sob-demanda"
+    };
+
+    jobs.set(
+      id,
+      job
     );
 
+    res.json({
+      id,
+      total
+    });
 
-    D.c.forEach(
-      f =>
-        fd.append(
-          "ctas",
-          f
-        )
-    );
+    /* =====================================================
+       PROCESSAMENTO
+    ===================================================== */
 
+    (async () => {
 
-    $("go").disabled =
-      true;
+      const normalizedHooks = [];
+      const normalizedBodies = [];
+      const normalizedCtas = [];
 
+      try {
 
-    $("download")
-      .style.display =
-      "none";
+        /* ================================================
+           1. GANCHOS
+        ================================================ */
 
+        job.current =
+          "Preparando ganchos…";
 
-    $("result")
-      .innerHTML = "";
+        for (
+          let i = 0;
+          i < hooks.length;
+          i++
+        ) {
 
+          const file =
+            hooks[i];
 
-    $("originalitySummary")
-      .innerHTML = "";
+          const output =
+            path.join(
+              dir,
+              `hook-${String(i + 1).padStart(3, "0")}.mp4`
+            );
 
-
-    $("bar")
-      .style.width =
-      "0%";
-
-
-    $("status")
-      .textContent =
-      "Verificando sessão…";
-
-
-    try{
-
-      let headers =
-        await authHeaders(
-          false
-        );
-
-
-      $("status")
-        .textContent =
-        "Enviando vídeos…";
-
-
-      let r =
-        await fetch(
-          "/api/jobs",
-          {
-            method:"POST",
-            headers,
-            body:fd
-          }
-        );
-
-
-      if(
-        r.status === 401
-      ){
-
-        $("status")
-          .textContent =
-          "Renovando sessão…";
-
-
-        const refreshed =
-          await refreshAuthSession();
-
-
-        if(
-          !refreshed
-        ){
-
-          throw new Error(
-            "O servidor recusou sua sessão. Faça login novamente."
+          await normalizeVideo(
+            file.path,
+            output,
+            dir
           );
 
-        }
+          normalizedHooks.push({
+            source:
+              file,
 
+            path:
+              output
+          });
 
-        headers =
-          await authHeaders(
-            false
-          );
-
-
-        r =
-          await fetch(
-            "/api/jobs",
+          await fsp.rm(
+            file.path,
             {
-              method:"POST",
-              headers,
-              body:fd
+              force: true
             }
           );
+        }
 
-      }
+        /* ================================================
+           2. CORPOS
+        ================================================ */
 
+        job.current =
+          "Preparando corpos…";
 
-      let j;
+        for (
+          let i = 0;
+          i < bodies.length;
+          i++
+        ) {
 
+          const file =
+            bodies[i];
 
-      try{
+          const output =
+            path.join(
+              dir,
+              `body-${String(i + 1).padStart(3, "0")}.mp4`
+            );
 
-        j =
-          await r.json();
+          await normalizeVideo(
+            file.path,
+            output,
+            dir
+          );
 
-      }catch(error){
+          normalizedBodies.push({
+            source:
+              file,
 
-        throw new Error(
-          `Resposta inválida do servidor. Código: ${r.status}`
+            path:
+              output
+          });
+
+          await fsp.rm(
+            file.path,
+            {
+              force: true
+            }
+          );
+        }
+
+        /* ================================================
+           3. CTAs
+        ================================================ */
+
+        job.current =
+          "Preparando CTAs…";
+
+        for (
+          let i = 0;
+          i < ctas.length;
+          i++
+        ) {
+
+          const file =
+            ctas[i];
+
+          const output =
+            path.join(
+              dir,
+              `cta-${String(i + 1).padStart(3, "0")}.mp4`
+            );
+
+          await normalizeVideo(
+            file.path,
+            output,
+            dir
+          );
+
+          normalizedCtas.push({
+            source:
+              file,
+
+            path:
+              output
+          });
+
+          await fsp.rm(
+            file.path,
+            {
+              force: true
+            }
+          );
+        }
+
+        /* ================================================
+           4. PREPARA AS COMBINAÇÕES
+
+           NÃO cria os 150 MP4 aqui.
+           Apenas registra as combinações.
+        ================================================ */
+
+        job.current =
+          "Preparando combinações…";
+
+        let index = 0;
+
+        for (
+          let hookIndex = 0;
+          hookIndex < normalizedHooks.length;
+          hookIndex++
+        ) {
+
+          for (
+            let bodyIndex = 0;
+            bodyIndex < normalizedBodies.length;
+            bodyIndex++
+          ) {
+
+            for (
+              let ctaIndex = 0;
+              ctaIndex < normalizedCtas.length;
+              ctaIndex++
+            ) {
+
+              index++;
+
+              const hook =
+                normalizedHooks[
+                  hookIndex
+                ];
+
+              const body =
+                normalizedBodies[
+                  bodyIndex
+                ];
+
+              const cta =
+                normalizedCtas[
+                  ctaIndex
+                ];
+
+              job.current =
+                `Preparando vídeos: ${index}/${total}`;
+
+              /* ==========================================
+                 ORIGINALIDADE
+              ========================================== */
+
+              const currentCombination = {
+                hook: {
+                  path:
+                    hook.source.path
+                },
+
+                body: {
+                  path:
+                    body.source.path
+                },
+
+                cta: {
+                  path:
+                    cta.source.path
+                }
+              };
+
+              const previousIndex =
+                index - 2;
+
+              const previousCombination =
+                previousIndex >= 0
+                  ? {
+                      hook: {
+                        path:
+                          normalizedHooks[
+                            Math.floor(
+                              previousIndex /
+                              (
+                                normalizedBodies.length *
+                                normalizedCtas.length
+                              )
+                            )
+                          ]?.source.path
+                      },
+
+                      body: {
+                        path:
+                          normalizedBodies[
+                            Math.floor(
+                              (
+                                previousIndex /
+                                normalizedCtas.length
+                              ) %
+                              normalizedBodies.length
+                            )
+                          ]?.source.path
+                      },
+
+                      cta: {
+                        path:
+                          normalizedCtas[
+                            previousIndex %
+                            normalizedCtas.length
+                          ]?.source.path
+                      }
+                    }
+                  : null;
+
+              const originality =
+                calculateOriginality(
+                  currentCombination,
+                  previousCombination
+                );
+
+              /* ==========================================
+                 SALVA SOMENTE OS DADOS
+              ========================================== */
+
+              job.files.push({
+
+                name:
+                  `video-${String(index).padStart(3, "0")}.mp4`,
+
+                hook:
+                  safeName(
+                    hook.source.originalname
+                  ),
+
+                body:
+                  safeName(
+                    body.source.originalname
+                  ),
+
+                cta:
+                  safeName(
+                    cta.source.originalname
+                  ),
+
+                hookIndex:
+                  hookIndex + 1,
+
+                bodyIndex:
+                  bodyIndex + 1,
+
+                ctaIndex:
+                  ctaIndex + 1,
+
+                index,
+
+                originality
+              });
+
+              job.done =
+                index;
+            }
+          }
+        }
+
+        /* ================================================
+           5. ORDENA
+        ================================================ */
+
+        job.files.sort(
+          (a, b) =>
+            a.index - b.index
         );
 
-      }
+        /* ================================================
+           6. FINALIZADO
 
+           O ZIP é montado quando o usuário clicar.
+        ================================================ */
 
-      if(
-        !r.ok
-      ){
+        job.current =
+          "Concluído";
 
-        throw new Error(
-          j.error ||
-          `Falha no envio. Código: ${r.status}`
+        job.status =
+          "done";
+
+        job.zip =
+          `/api/jobs/${id}/zip`;
+
+      } catch (e) {
+
+        console.error(
+          "Erro no processamento:",
+          e
         );
 
-      }
+        job.status =
+          "error";
 
+        job.error =
+          e?.message ||
+          "Erro desconhecido";
 
-      const poll =
-        async () => {
+        job.current =
+          "Falhou";
 
-          try{
-
-            let headers =
-              await authHeaders();
-
-
-            let response =
-              await fetch(
-                "/api/jobs/" +
-                encodeURIComponent(
-                  j.id
-                ),
+        await Promise.all(
+          [
+            ...hooks,
+            ...bodies,
+            ...ctas
+          ].map(
+            file =>
+              fsp.rm(
+                file.path,
                 {
-                  headers
+                  force: true
+                }
+              )
+          )
+        );
+      }
+
+    })();
+
+  }
+);
+
+/* =========================================================
+   CONSULTA JOB
+========================================================= */
+
+app.get(
+  "/api/jobs/:id",
+
+  requireAuth,
+
+  (req, res) => {
+
+    const job =
+      jobs.get(
+        req.params.id
+      );
+
+    if (!job) {
+
+      return res.status(404).json({
+        error:
+          "Processamento não encontrado."
+      });
+    }
+
+    if (
+      job.userId !==
+      req.user.id
+    ) {
+
+      return res.status(404).json({
+        error:
+          "Processamento não encontrado."
+      });
+    }
+
+    res.json(job);
+  }
+);
+
+/* =========================================================
+   DOWNLOAD ZIP
+========================================================= */
+
+app.get(
+  "/api/jobs/:id/zip",
+
+  requireAuth,
+
+  async (req, res) => {
+
+    const job =
+      jobs.get(
+        req.params.id
+      );
+
+    if (!job) {
+
+      return res
+        .status(404)
+        .send(
+          "Processamento não encontrado."
+        );
+    }
+
+    if (
+      job.userId !==
+      req.user.id
+    ) {
+
+      return res
+        .status(404)
+        .send(
+          "Processamento não encontrado."
+        );
+    }
+
+    if (
+      job.status !==
+      "done"
+    ) {
+
+      return res
+        .status(400)
+        .send(
+          "O processamento ainda não terminou."
+        );
+    }
+
+    res.statusCode = 200;
+
+    res.setHeader(
+      "Content-Type",
+      "application/zip"
+    );
+
+    res.setHeader(
+      "Content-Disposition",
+      'attachment; filename="geramix-videos.zip"'
+    );
+
+    const archive =
+      archiver(
+        "zip",
+        {
+          zlib: {
+            level: 0
+          }
+        }
+      );
+
+    archive.on(
+      "error",
+      error => {
+
+        console.error(
+          "Erro criando ZIP:",
+          error
+        );
+
+        if (!res.headersSent) {
+
+          res
+            .status(500)
+            .send(
+              "Erro ao criar ZIP."
+            );
+
+        } else {
+
+          res.destroy(error);
+
+        }
+      }
+    );
+
+    archive.pipe(res);
+
+    try {
+
+      for (
+        const file
+        of job.files
+      ) {
+
+        const tempVideo =
+          await createVideoForJob(
+            job,
+            file
+          );
+
+        try {
+
+          await new Promise(
+            (resolve, reject) => {
+
+              const input =
+                fs.createReadStream(
+                  tempVideo
+                );
+
+              input.on(
+                "error",
+                reject
+              );
+
+              input.on(
+                "close",
+                resolve
+              );
+
+              archive.append(
+                input,
+                {
+                  name:
+                    file.name
                 }
               );
 
-
-            if(
-              response.status === 401
-            ){
-
-              const refreshed =
-                await refreshAuthSession();
-
-
-              if(
-                !refreshed
-              ){
-
-                throw new Error(
-                  "A sessão expirou durante o processamento. Faça login novamente."
-                );
-
-              }
-
-
-              headers =
-                await authHeaders();
-
-
-              response =
-                await fetch(
-                  "/api/jobs/" +
-                  encodeURIComponent(
-                    j.id
-                  ),
-                  {
-                    headers
-                  }
-                );
-
             }
+          );
 
+        } finally {
 
-            let x;
-
-
-            try{
-
-              x =
-                await response.json();
-
-            }catch(error){
-
-              throw new Error(
-                `Resposta inválida do servidor. Código: ${response.status}`
-              );
-
+          await fsp.rm(
+            tempVideo,
+            {
+              force: true
             }
+          );
 
+        }
+      }
 
-            if(
-              !response.ok
-            ){
+      await archive.finalize();
 
-              throw new Error(
-                x.error ||
-                `Falha ao consultar processamento. Código: ${response.status}`
-              );
-
-            }
-
-
-            const pct =
-              x.total
-                ? Math.round(
-                    x.done /
-                    x.total *
-                    100
-                  )
-                : 0;
-
-
-            $("bar")
-              .style.width =
-              pct + "%";
-
-
-            $("status")
-              .textContent =
-              x.current ||
-              "Processando…";
-
-
-            if(
-              x.files?.length
-            ){
-
-              renderOriginalitySummary(
-                x.files
-              );
-
-
-              const videoItems =
-                [];
-
-
-              for(
-                const f
-                of x.files
-              ){
-
-                const videoUrl =
-                  await createAuthenticatedVideoUrl(
-                    j.id,
-                    f.name
-                  );
-
-
-                const originality =
-                  Number(
-                    f.originality
-                  );
-
-
-                videoItems.push(`
-
-                  <div class="combo">
-
-                    <b>
-                      ✓ ${escapeHtml(f.name)}
-                    </b>
-
-
-                    <div class="originality ${originalityClass(originality)}">
-
-                      <small>
-                        Originalidade estrutural
-                      </small>
-
-                      ${originality}%
-
-                    </div>
-
-
-                    <video
-                      class="preview"
-                      controls
-                      playsinline
-                      preload="metadata"
-                      src="${videoUrl}"
-                    >
-
-                      Seu navegador não consegue reproduzir este vídeo.
-
-                    </video>
-
-
-                    <span class="pill">
-                      Gancho:
-                      ${escapeHtml(f.hook)}
-                    </span>
-
-
-                    <span class="pill">
-                      Corpo:
-                      ${escapeHtml(f.body)}
-                    </span>
-
-
-                    <span class="pill">
-                      CTA:
-                      ${escapeHtml(f.cta)}
-                    </span>
-
-
-                    <br>
-
-
-                    <span style="color:#aaa">
-                      Combinação única #${f.index}
-                    </span>
-
-
-                    <a
-                      class="single-download"
-                      href="${videoUrl}"
-                      download="${escapeHtml(f.name)}"
-                    >
-                      ⬇ Baixar este vídeo
-                    </a>
-
-                  </div>
-
-                `);
-
-              }
-
-
-              $("result")
-                .innerHTML =
-                videoItems.join("");
-
-            }
-
-
-            if(
-              x.status ===
-              "done"
-            ){
-
-              $("bar")
-                .style.width =
-                "100%";
-
-
-              const token =
-                await getAuthToken();
-
-
-              $("download")
-                .href =
-                x.zip +
-                "?token=" +
-                encodeURIComponent(
-                  token
-                );
-
-
-              $("download")
-                .style.display =
-                "block";
-
-
-              $("status")
-                .textContent =
-                `Concluído: ${x.total} vídeos.`;
-
-
-              $("go")
-                .disabled =
-                false;
-
-
-              return;
-
-            }
-
-
-            if(
-              x.status ===
-              "error"
-            ){
-
-              throw new Error(
-                x.error ||
-                "Processamento falhou."
-              );
-
-            }
-
-
-            setTimeout(
-              poll,
-              1000
-            );
-
-          }catch(error){
-
-            console.error(
-              "Erro no processamento:",
-              error
-            );
-
-
-            $("status")
-              .textContent =
-              "Erro: " +
-              error.message;
-
-
-            alert(
-              error.message
-            );
-
-
-            $("go")
-              .disabled =
-              false;
-
-          }
-
-        };
-
-
-      poll();
-
-
-    }catch(error){
+    } catch (error) {
 
       console.error(
-        "Erro ao gerar vídeos:",
+        "Erro no download ZIP:",
         error
       );
 
+      await fsp.rm(
+        path.join(
+          JOBS,
+          job.id
+        ),
+        {
+          recursive: true,
+          force: true
+        }
+      ).catch(() => {});
 
-      $("status")
-        .textContent =
-        "Erro: " +
-        error.message;
+      if (!res.headersSent) {
 
+        return res
+          .status(500)
+          .send(
+            "Erro ao criar ZIP."
+          );
+      }
 
-      alert(
-        error.message
-      );
-
-
-      $("go")
-        .disabled =
-        false;
-
+      res.destroy(error);
     }
 
-  };
-
+  }
+);
 
 /* =========================================================
-   INICIA
-   ========================================================= */
+   DOWNLOAD / VISUALIZAÇÃO DE VÍDEO
+========================================================= */
 
-(async()=>{
+app.get(
+  "/api/jobs/:id/video/:name",
 
-  const authenticated =
-    await initializeAuth();
+  requireAuth,
 
+  async (req, res) => {
 
-  if(
-    authenticated
-  ){
+    const job =
+      jobs.get(
+        req.params.id
+      );
 
-    $("status")
-      .textContent =
-      "Pronto.";
+    if (!job) {
+      return res.sendStatus(404);
+    }
+
+    if (
+      job.userId !==
+      req.user.id
+    ) {
+      return res.sendStatus(404);
+    }
+
+    const name =
+      safeName(
+        req.params.name
+      );
+
+    const file =
+      job.files.find(
+        item =>
+          item.name === name
+      );
+
+    if (!file) {
+      return res.sendStatus(404);
+    }
+
+    let tempVideo = null;
+
+    try {
+
+      tempVideo =
+        await createVideoForJob(
+          job,
+          file
+        );
+
+      const stat =
+        await fsp.stat(
+          tempVideo
+        );
+
+      const size =
+        stat.size;
+
+      const range =
+        req.headers.range;
+
+      res.setHeader(
+        "Content-Type",
+        "video/mp4"
+      );
+
+      res.setHeader(
+        "Accept-Ranges",
+        "bytes"
+      );
+
+      res.setHeader(
+        "Cache-Control",
+        "no-store"
+      );
+
+      if (!range) {
+
+        res.setHeader(
+          "Content-Length",
+          size
+        );
+
+        res.setHeader(
+          "Content-Disposition",
+          `inline; filename="${name}"`
+        );
+
+        const stream =
+          fs.createReadStream(
+            tempVideo
+          );
+
+        stream.on(
+          "close",
+          () => {
+
+            fsp.rm(
+              tempVideo,
+              {
+                force: true
+              }
+            ).catch(() => {});
+
+          }
+        );
+
+        stream.on(
+          "error",
+          error => {
+
+            console.error(
+              "Erro enviando vídeo:",
+              error
+            );
+
+            fsp.rm(
+              tempVideo,
+              {
+                force: true
+              }
+            ).catch(() => {});
+
+            if (!res.headersSent) {
+
+              res.sendStatus(500);
+
+            } else {
+
+              res.destroy(error);
+
+            }
+
+          }
+        );
+
+        return stream.pipe(res);
+      }
+
+      const matches =
+        range.match(
+          /bytes=(\d*)-(\d*)/
+        );
+
+      if (!matches) {
+
+        await fsp.rm(
+          tempVideo,
+          {
+            force: true
+          }
+        );
+
+        return res
+          .status(416)
+          .set(
+            "Content-Range",
+            `bytes */${size}`
+          )
+          .end();
+      }
+
+      let start =
+        matches[1]
+          ? Number(matches[1])
+          : 0;
+
+      let end =
+        matches[2]
+          ? Number(matches[2])
+          : size - 1;
+
+      if (
+        !matches[1] &&
+        matches[2]
+      ) {
+
+        const suffixLength =
+          Number(matches[2]);
+
+        start =
+          Math.max(
+            0,
+            size - suffixLength
+          );
+
+        end =
+          size - 1;
+      }
+
+      if (
+        start < 0 ||
+        start >= size ||
+        end < start
+      ) {
+
+        await fsp.rm(
+          tempVideo,
+          {
+            force: true
+          }
+        );
+
+        return res
+          .status(416)
+          .set(
+            "Content-Range",
+            `bytes */${size}`
+          )
+          .end();
+      }
+
+      end =
+        Math.min(
+          end,
+          size - 1
+        );
+
+      const chunkSize =
+        end - start + 1;
+
+      res.statusCode = 206;
+
+      res.setHeader(
+        "Content-Range",
+        `bytes ${start}-${end}/${size}`
+      );
+
+      res.setHeader(
+        "Content-Length",
+        chunkSize
+      );
+
+      res.setHeader(
+        "Content-Disposition",
+        `inline; filename="${name}"`
+      );
+
+      const stream =
+        fs.createReadStream(
+          tempVideo,
+          {
+            start,
+            end
+          }
+        );
+
+      stream.on(
+        "close",
+        () => {
+
+          fsp.rm(
+            tempVideo,
+            {
+              force: true
+            }
+          ).catch(() => {});
+
+        }
+      );
+
+      stream.on(
+        "error",
+        error => {
+
+          console.error(
+            "Erro enviando trecho do vídeo:",
+            error
+          );
+
+          fsp.rm(
+            tempVideo,
+            {
+              force: true
+            }
+          ).catch(() => {});
+
+          if (!res.headersSent) {
+
+            res.sendStatus(500);
+
+          } else {
+
+            res.destroy(error);
+
+          }
+
+        }
+      );
+
+      stream.pipe(res);
+
+    } catch (error) {
+
+      if (tempVideo) {
+
+        await fsp.rm(
+          tempVideo,
+          {
+            force: true
+          }
+        ).catch(() => {});
+
+      }
+
+      console.error(
+        "Erro montando vídeo:",
+        error
+      );
+
+      if (!res.headersSent) {
+
+        return res
+          .status(500)
+          .send(
+            "Erro ao montar o vídeo."
+          );
+      }
+
+      res.destroy(error);
+    }
 
   }
+);
 
-})();
+/* =========================================================
+   ERROS
+========================================================= */
 
-</script>
+app.use(
+  (
+    error,
+    req,
+    res,
+    next
+  ) => {
 
-</body>
-</html>
+    if (
+      error instanceof
+      multer.MulterError
+    ) {
+
+      console.error(
+        "Erro Multer:",
+        error
+      );
+
+      return res.status(400).json({
+        error:
+          "Erro no envio dos vídeos: " +
+          error.message
+      });
+    }
+
+    if (error) {
+
+      console.error(
+        "Erro no servidor:",
+        error
+      );
+
+      return res.status(500).json({
+        error:
+          error.message ||
+          "Erro interno do servidor."
+      });
+    }
+
+    next();
+  }
+);
+
+/* =========================================================
+   SERVIDOR
+========================================================= */
+
+app.listen(
+  PORT,
+  () => {
+
+    console.log(
+      `GeraMix rodando na porta ${PORT}`
+    );
+
+    console.log(
+      `FFmpeg simultâneos: ${FFMPEG_CONCURRENCY}`
+    );
+
+  }
+);
