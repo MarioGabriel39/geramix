@@ -55,10 +55,6 @@
       font-weight: 600;
     }
 
-    .logout:hover {
-      background: #475569;
-    }
-
     .welcome {
       margin-bottom: 25px;
     }
@@ -112,6 +108,12 @@
       color: #cbd5e1;
     }
 
+    .account-email {
+      color: #cbd5e1;
+      margin-top: 8px;
+      word-break: break-word;
+    }
+
     .actions {
       margin-top: 18px;
       display: grid;
@@ -129,16 +131,8 @@
       font-weight: 700;
     }
 
-    .action:hover {
-      background: #818cf8;
-    }
-
     .secondary {
       background: #334155;
-    }
-
-    .secondary:hover {
-      background: #475569;
     }
 
     .status {
@@ -149,6 +143,11 @@
       color: #dcfce7;
       font-size: 13px;
       font-weight: 700;
+    }
+
+    .loading {
+      color: #cbd5e1;
+      margin-top: 10px;
     }
 
     @media (max-width: 700px) {
@@ -192,7 +191,14 @@
 
     <section class="welcome">
       <h1>Olá! 👋</h1>
-      <p>Bem-vindo ao seu painel do GeraMix.</p>
+
+      <p>
+        Bem-vindo ao seu painel do GeraMix.
+      </p>
+
+      <div class="account-email" id="userEmail">
+        Carregando sua conta...
+      </div>
     </section>
 
     <div class="grid">
@@ -223,6 +229,10 @@
         <div class="available">
           697 vídeos disponíveis
         </div>
+
+        <div class="loading">
+          Em breve esse número será atualizado automaticamente.
+        </div>
       </div>
 
       <div class="card">
@@ -233,10 +243,7 @@
         </p>
 
         <div class="actions">
-          <a
-            class="action"
-            href="/"
-          >
+          <a class="action" href="/">
             Criar vídeos
           </a>
         </div>
@@ -246,14 +253,11 @@
         <h2>Minha conta</h2>
 
         <p class="subtitle">
-          Em breve você poderá gerenciar sua conta e assinatura aqui.
+          Sua conta está conectada ao GeraMix.
         </p>
 
         <div class="actions">
-          <a
-            class="action secondary"
-            href="/"
-          >
+          <a class="action secondary" href="/">
             Voltar ao GeraMix
           </a>
         </div>
@@ -263,12 +267,51 @@
 
   </div>
 
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
   <script>
-    document
-      .getElementById("logout")
-      .addEventListener("click", () => {
+    async function carregarUsuario() {
+      try {
+        const resposta = await fetch("/api/config");
+
+        if (!resposta.ok) {
+          throw new Error("Não foi possível carregar a configuração.");
+        }
+
+        const config = await resposta.json();
+
+        const supabaseClient = window.supabase.createClient(
+          config.supabaseUrl,
+          config.supabaseAnonKey
+        );
+
+        const {
+          data: { session },
+          error
+        } = await supabaseClient.auth.getSession();
+
+        if (error || !session) {
+          window.location.href = "/login.html";
+          return;
+        }
+
+        document.getElementById("userEmail").textContent =
+          session.user.email;
+
+        document
+          .getElementById("logout")
+          .addEventListener("click", async () => {
+            await supabaseClient.auth.signOut();
+            window.location.href = "/login.html";
+          });
+
+      } catch (erro) {
+        console.error(erro);
         window.location.href = "/login.html";
-      });
+      }
+    }
+
+    carregarUsuario();
   </script>
 
 </body>
