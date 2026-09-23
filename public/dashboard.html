@@ -118,6 +118,12 @@
       word-break: break-word;
     }
 
+    .renewal {
+      color: #cbd5e1;
+      margin-top: 12px;
+      font-size: 14px;
+    }
+
     .actions {
       margin-top: 18px;
       display: grid;
@@ -235,6 +241,10 @@
         <span class="status" id="subscriptionStatus">
           Carregando...
         </span>
+
+        <div class="renewal" id="renewal">
+          Próxima renovação: carregando...
+        </div>
       </div>
 
       <div class="card">
@@ -290,24 +300,41 @@
   <script>
     let supabaseClient = null;
 
+    function formatarData(data) {
+      if (!data) {
+        return "Não informada";
+      }
+
+      const dataObj = new Date(data);
+
+      if (Number.isNaN(dataObj.getTime())) {
+        return "Não informada";
+      }
+
+      return dataObj.toLocaleDateString("pt-BR", {
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric"
+      });
+    }
+
     async function carregarDashboard() {
       try {
-        // Busca as configurações públicas do GeraMix
         const respostaConfig = await fetch("/api/config");
 
         if (!respostaConfig.ok) {
-          throw new Error("Não foi possível carregar a configuração.");
+          throw new Error(
+            "Não foi possível carregar a configuração."
+          );
         }
 
         const config = await respostaConfig.json();
 
-        // Conecta ao Supabase
         supabaseClient = window.supabase.createClient(
           config.supabaseUrl,
           config.supabaseAnonKey
         );
 
-        // Verifica a sessão atual
         const {
           data: { session },
           error: sessionError
@@ -318,16 +345,15 @@
           return;
         }
 
-        // Mostra o e-mail do usuário
         document.getElementById("userEmail").textContent =
           session.user.email;
 
-        // Configura o botão Sair
         document
           .getElementById("logout")
           .addEventListener("click", async () => {
 
-            const { error } = await supabaseClient.auth.signOut();
+            const { error } =
+              await supabaseClient.auth.signOut();
 
             if (error) {
               alert("Não foi possível sair da conta.");
@@ -337,21 +363,24 @@
             window.location.href = "/login.html";
           });
 
-        // Busca a assinatura do usuário
-        const { data: subscriptions, error: subscriptionError } =
-          await supabaseClient
-            .from("subscriptions")
-            .select(`
-              status,
-              videos_used,
-              current_period_start,
-              current_period_end,
-              plan_id
-            `)
-            .eq("user_id", session.user.id)
-            .eq("status", "active")
-            .order("created_at", { ascending: false })
-            .limit(1);
+        const {
+          data: subscriptions,
+          error: subscriptionError
+        } = await supabaseClient
+          .from("subscriptions")
+          .select(`
+            status,
+            videos_used,
+            current_period_start,
+            current_period_end,
+            plan_id
+          `)
+          .eq("user_id", session.user.id)
+          .eq("status", "active")
+          .order("created_at", {
+            ascending: false
+          })
+          .limit(1);
 
         if (subscriptionError) {
           throw new Error(
@@ -360,17 +389,29 @@
           );
         }
 
-        if (!subscriptions || subscriptions.length === 0) {
-          document.getElementById("subscriptionStatus").textContent =
-            "Sem assinatura ativa";
+        if (
+          !subscriptions ||
+          subscriptions.length === 0
+        ) {
+          document.getElementById(
+            "subscriptionStatus"
+          ).textContent = "Sem assinatura ativa";
 
-          document.getElementById("usage").textContent =
-            "0 / 0";
+          document.getElementById(
+            "renewal"
+          ).textContent = "Nenhuma renovação programada.";
 
-          document.getElementById("available").textContent =
-            "Nenhum vídeo disponível";
+          document.getElementById(
+            "usage"
+          ).textContent = "0 / 0";
 
-          document.getElementById("usageMessage").textContent =
+          document.getElementById(
+            "available"
+          ).textContent = "Nenhum vídeo disponível";
+
+          document.getElementById(
+            "usageMessage"
+          ).textContent =
             "Não encontramos uma assinatura ativa.";
 
           return;
@@ -378,14 +419,17 @@
 
         const subscription = subscriptions[0];
 
-        // Busca os dados do plano
-        const { data: plans, error: planError } =
-          await supabaseClient
-            .from("plans")
-            .select("name, price, monthly_limit")
-            .eq("id", subscription.plan_id)
-            .eq("active", true)
-            .limit(1);
+        const {
+          data: plans,
+          error: planError
+        } = await supabaseClient
+          .from("plans")
+          .select(
+            "name, price, monthly_limit"
+          )
+          .eq("id", subscription.plan_id)
+          .eq("active", true)
+          .limit(1);
 
         if (planError) {
           throw new Error(
@@ -400,53 +444,80 @@
 
         const plan = plans[0];
 
-        const used = Number(subscription.videos_used || 0);
-        const limit = Number(plan.monthly_limit || 0);
+        const used =
+          Number(subscription.videos_used || 0);
 
-        const available = Math.max(0, limit - used);
+        const limit =
+          Number(plan.monthly_limit || 0);
 
-        // Atualiza nome do plano
-        document.getElementById("planName").textContent =
-          plan.name;
+        const available =
+          Math.max(0, limit - used);
 
-        // Atualiza preço
-        document.getElementById("planPrice").textContent =
+        document.getElementById(
+          "planName"
+        ).textContent = plan.name;
+
+        document.getElementById(
+          "planPrice"
+        ).textContent =
           "R$ " +
-          Number(plan.price).toFixed(2).replace(".", ",") +
+          Number(plan.price)
+            .toFixed(2)
+            .replace(".", ",") +
           " / mês";
 
-        // Atualiza status
-        document.getElementById("subscriptionStatus").textContent =
-          "Assinatura ativa";
+        document.getElementById(
+          "subscriptionStatus"
+        ).textContent = "Assinatura ativa";
 
-        // Atualiza utilização real
-        document.getElementById("usage").textContent =
+        document.getElementById(
+          "renewal"
+        ).textContent =
+          "Próxima renovação: " +
+          formatarData(
+            subscription.current_period_end
+          );
+
+        document.getElementById(
+          "usage"
+        ).textContent =
           used.toLocaleString("pt-BR") +
           " / " +
           limit.toLocaleString("pt-BR");
 
-        // Atualiza quantidade disponível
-        document.getElementById("available").textContent =
+        document.getElementById(
+          "available"
+        ).textContent =
           available.toLocaleString("pt-BR") +
           " vídeos disponíveis";
 
-        document.getElementById("usageMessage").textContent =
+        document.getElementById(
+          "usageMessage"
+        ).textContent =
           "Seu consumo é atualizado automaticamente.";
 
       } catch (erro) {
-        console.error("Erro no Dashboard:", erro);
+        console.error(
+          "Erro no Dashboard:",
+          erro
+        );
 
-        document.getElementById("usage").textContent =
-          "Erro";
+        document.getElementById(
+          "usage"
+        ).textContent = "Erro";
 
-        document.getElementById("available").textContent =
+        document.getElementById(
+          "available"
+        ).textContent =
           "Não foi possível carregar os dados.";
 
-        document.getElementById("usageMessage").className =
-          "error";
+        document.getElementById(
+          "usageMessage"
+        ).className = "error";
 
-        document.getElementById("usageMessage").textContent =
-          erro.message;
+        document.getElementById(
+          "usageMessage"
+        ).textContent = erro.message;
       }
     }
 
