@@ -55,6 +55,10 @@
       font-weight: 600;
     }
 
+    .logout:hover {
+      background: #475569;
+    }
+
     .welcome {
       margin-bottom: 25px;
     }
@@ -131,8 +135,16 @@
       font-weight: 700;
     }
 
+    .action:hover {
+      background: #818cf8;
+    }
+
     .secondary {
       background: #334155;
+    }
+
+    .secondary:hover {
+      background: #475569;
     }
 
     .status {
@@ -148,6 +160,12 @@
     .loading {
       color: #cbd5e1;
       margin-top: 10px;
+    }
+
+    .error {
+      color: #fecaca;
+      margin-top: 10px;
+      font-size: 14px;
     }
 
     @media (max-width: 700px) {
@@ -206,32 +224,32 @@
       <div class="card">
         <h2>Seu plano</h2>
 
-        <div class="plan">
+        <div class="plan" id="planName">
           GeraMix
         </div>
 
-        <div class="price">
+        <div class="price" id="planPrice">
           R$ 29,90 / mês
         </div>
 
-        <span class="status">
-          Assinatura ativa
+        <span class="status" id="subscriptionStatus">
+          Carregando...
         </span>
       </div>
 
       <div class="card">
         <h2>Uso mensal</h2>
 
-        <div class="usage">
-          303 / 1.000
+        <div class="usage" id="usage">
+          Carregando...
         </div>
 
-        <div class="available">
-          697 vídeos disponíveis
+        <div class="available" id="available">
+          Carregando...
         </div>
 
-        <div class="loading">
-          Em breve esse número será atualizado automaticamente.
+        <div class="loading" id="usageMessage">
+          Buscando seus dados...
         </div>
       </div>
 
@@ -270,48 +288,169 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
   <script>
-    async function carregarUsuario() {
-      try {
-        const resposta = await fetch("/api/config");
+    let supabaseClient = null;
 
-        if (!resposta.ok) {
+    async function carregarDashboard() {
+      try {
+        // Busca as configurações públicas do GeraMix
+        const respostaConfig = await fetch("/api/config");
+
+        if (!respostaConfig.ok) {
           throw new Error("Não foi possível carregar a configuração.");
         }
 
-        const config = await resposta.json();
+        const config = await respostaConfig.json();
 
-        const supabaseClient = window.supabase.createClient(
+        // Conecta ao Supabase
+        supabaseClient = window.supabase.createClient(
           config.supabaseUrl,
           config.supabaseAnonKey
         );
 
+        // Verifica a sessão atual
         const {
           data: { session },
-          error
+          error: sessionError
         } = await supabaseClient.auth.getSession();
 
-        if (error || !session) {
+        if (sessionError || !session) {
           window.location.href = "/login.html";
           return;
         }
 
+        // Mostra o e-mail do usuário
         document.getElementById("userEmail").textContent =
           session.user.email;
 
+        // Configura o botão Sair
         document
           .getElementById("logout")
           .addEventListener("click", async () => {
-            await supabaseClient.auth.signOut();
+
+            const { error } = await supabaseClient.auth.signOut();
+
+            if (error) {
+              alert("Não foi possível sair da conta.");
+              return;
+            }
+
             window.location.href = "/login.html";
           });
 
+        // Busca a assinatura do usuário
+        const { data: subscriptions, error: subscriptionError } =
+          await supabaseClient
+            .from("subscriptions")
+            .select(`
+              status,
+              videos_used,
+              current_period_start,
+              current_period_end,
+              plan_id
+            `)
+            .eq("user_id", session.user.id)
+            .eq("status", "active")
+            .order("created_at", { ascending: false })
+            .limit(1);
+
+        if (subscriptionError) {
+          throw new Error(
+            "Não foi possível carregar sua assinatura: " +
+            subscriptionError.message
+          );
+        }
+
+        if (!subscriptions || subscriptions.length === 0) {
+          document.getElementById("subscriptionStatus").textContent =
+            "Sem assinatura ativa";
+
+          document.getElementById("usage").textContent =
+            "0 / 0";
+
+          document.getElementById("available").textContent =
+            "Nenhum vídeo disponível";
+
+          document.getElementById("usageMessage").textContent =
+            "Não encontramos uma assinatura ativa.";
+
+          return;
+        }
+
+        const subscription = subscriptions[0];
+
+        // Busca os dados do plano
+        const { data: plans, error: planError } =
+          await supabaseClient
+            .from("plans")
+            .select("name, price, monthly_limit")
+            .eq("id", subscription.plan_id)
+            .eq("active", true)
+            .limit(1);
+
+        if (planError) {
+          throw new Error(
+            "Não foi possível carregar o plano: " +
+            planError.message
+          );
+        }
+
+        if (!plans || plans.length === 0) {
+          throw new Error("Plano não encontrado.");
+        }
+
+        const plan = plans[0];
+
+        const used = Number(subscription.videos_used || 0);
+        const limit = Number(plan.monthly_limit || 0);
+
+        const available = Math.max(0, limit - used);
+
+        // Atualiza nome do plano
+        document.getElementById("planName").textContent =
+          plan.name;
+
+        // Atualiza preço
+        document.getElementById("planPrice").textContent =
+          "R$ " +
+          Number(plan.price).toFixed(2).replace(".", ",") +
+          " / mês";
+
+        // Atualiza status
+        document.getElementById("subscriptionStatus").textContent =
+          "Assinatura ativa";
+
+        // Atualiza utilização real
+        document.getElementById("usage").textContent =
+          used.toLocaleString("pt-BR") +
+          " / " +
+          limit.toLocaleString("pt-BR");
+
+        // Atualiza quantidade disponível
+        document.getElementById("available").textContent =
+          available.toLocaleString("pt-BR") +
+          " vídeos disponíveis";
+
+        document.getElementById("usageMessage").textContent =
+          "Seu consumo é atualizado automaticamente.";
+
       } catch (erro) {
-        console.error(erro);
-        window.location.href = "/login.html";
+        console.error("Erro no Dashboard:", erro);
+
+        document.getElementById("usage").textContent =
+          "Erro";
+
+        document.getElementById("available").textContent =
+          "Não foi possível carregar os dados.";
+
+        document.getElementById("usageMessage").className =
+          "error";
+
+        document.getElementById("usageMessage").textContent =
+          erro.message;
       }
     }
 
-    carregarUsuario();
+    carregarDashboard();
   </script>
 
 </body>
