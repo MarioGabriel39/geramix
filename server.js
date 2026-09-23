@@ -126,10 +126,10 @@ const response =
       method: "GET",  
 
       headers: {  
-        Authorization:  
+        "Authorization":  
           `Bearer ${token}`,  
 
-        apikey:  
+        "apikey":  
           SUPABASE_ANON_KEY  
       }  
     }  
@@ -358,10 +358,10 @@ audio
 
 "-vf",  
 "scale=720:1280:force_original_aspect_ratio=decrease," +  
-  "pad=720:1280:(ow-iw)/2:(oh-ih)/2," +  
-  "setsar=1," +  
-  "fps=30," +  
-  "format=yuv420p",  
+"pad=720:1280:(ow-iw)/2:(oh-ih)/2," +  
+"setsar=1," +  
+"fps=30," +  
+"format=yuv420p",  
 
 "-c:v",  
 "libx264",  
@@ -756,9 +756,10 @@ res.json({
   total  
 });  
 
+
 /* =====================================================  
    PROCESSAMENTO  
-===================================================== */  
+   ===================================================== */  
 
 (async () => {  
 
@@ -770,7 +771,7 @@ res.json({
 
     /* ================================================  
        1. GANCHOS  
-    ================================================ */  
+       ================================================ */  
 
     job.current =  
       "Preparando ganchos…";  
@@ -812,9 +813,10 @@ res.json({
       );  
     }  
 
+
     /* ================================================  
        2. CORPOS  
-    ================================================ */  
+       ================================================ */  
 
     job.current =  
       "Preparando corpos…";  
@@ -856,9 +858,10 @@ res.json({
       );  
     }  
 
+
     /* ================================================  
        3. CTAs  
-    ================================================ */  
+       ================================================ */  
 
     job.current =  
       "Preparando CTAs…";  
@@ -900,12 +903,14 @@ res.json({
       );  
     }  
 
+
     /* ================================================  
        4. PREPARA AS COMBINAÇÕES  
 
-       NÃO cria os 150 MP4 aqui.  
-       Apenas registra as combinações.  
-    ================================================ */  
+       IMPORTANTE:  
+       Aqui NÃO criamos os 150 MP4.  
+       Apenas registramos as combinações.  
+       ================================================ */  
 
     job.current =  
       "Preparando combinações…";  
@@ -950,9 +955,10 @@ res.json({
           job.current =  
             `Preparando vídeos: ${index}/${total}`;  
 
+
           /* ==========================================  
              ORIGINALIDADE  
-          ========================================== */  
+             ========================================== */  
 
           const currentCombination = {  
             hook: {  
@@ -1019,9 +1025,12 @@ res.json({
               previousCombination  
             );  
 
+
           /* ==========================================  
              SALVA SOMENTE OS DADOS  
-          ========================================== */  
+
+             O MP4 NÃO É SALVO AQUI.  
+             ========================================== */  
 
           job.files.push({  
 
@@ -1063,20 +1072,23 @@ res.json({
       }  
     }  
 
+
     /* ================================================  
        5. ORDENA  
-    ================================================ */  
+       ================================================ */  
 
     job.files.sort(  
       (a, b) =>  
         a.index - b.index  
     );  
 
+
     /* ================================================  
        6. FINALIZADO  
 
-       O ZIP é montado quando o usuário clicar.  
-    ================================================ */  
+       O ZIP será montado quando o usuário clicar  
+       em baixar ZIP.  
+       ================================================ */  
 
     job.current =  
       "Concluído";  
@@ -1240,24 +1252,17 @@ const archive =
 archive.on(  
   "error",  
   error => {  
-
     console.error(  
       "Erro criando ZIP:",  
       error  
     );  
 
     if (!res.headersSent) {  
-
-      res  
-        .status(500)  
-        .send(  
-          "Erro ao criar ZIP."  
-        );  
-
+      res.status(500).send(  
+        "Erro ao criar ZIP."  
+      );  
     } else {  
-
       res.destroy(error);  
-
     }  
   }  
 );  
@@ -1316,7 +1321,6 @@ try {
           force: true  
         }  
       );  
-
     }  
   }  
 
@@ -1341,7 +1345,6 @@ try {
   ).catch(() => {});  
 
   if (!res.headersSent) {  
-
     return res  
       .status(500)  
       .send(  
@@ -1453,21 +1456,18 @@ try {
     stream.on(  
       "close",  
       () => {  
-
         fsp.rm(  
           tempVideo,  
           {  
             force: true  
           }  
         ).catch(() => {});  
-
       }  
     );  
 
     stream.on(  
       "error",  
       error => {  
-
         console.error(  
           "Erro enviando vídeo:",  
           error  
@@ -1481,20 +1481,16 @@ try {
         ).catch(() => {});  
 
         if (!res.headersSent) {  
-
           res.sendStatus(500);  
-
         } else {  
-
           res.destroy(error);  
-
         }  
-
       }  
     );  
 
     return stream.pipe(res);  
   }  
+
 
   const matches =  
     range.match(  
@@ -1533,7 +1529,6 @@ try {
     !matches[1] &&  
     matches[2]  
   ) {  
-
     const suffixLength =  
       Number(matches[2]);  
 
@@ -1607,21 +1602,18 @@ try {
   stream.on(  
     "close",  
     () => {  
-
       fsp.rm(  
         tempVideo,  
         {  
           force: true  
         }  
       ).catch(() => {});  
-
     }  
   );  
 
   stream.on(  
     "error",  
     error => {  
-
       console.error(  
         "Erro enviando trecho do vídeo:",  
         error  
@@ -1635,15 +1627,10 @@ try {
       ).catch(() => {});  
 
       if (!res.headersSent) {  
-
         res.sendStatus(500);  
-
       } else {  
-
         res.destroy(error);  
-
       }  
-
     }  
   );  
 
@@ -1652,14 +1639,12 @@ try {
 } catch (error) {  
 
   if (tempVideo) {  
-
     await fsp.rm(  
       tempVideo,  
       {  
         force: true  
       }  
     ).catch(() => {});  
-
   }  
 
   console.error(  
@@ -1668,7 +1653,6 @@ try {
   );  
 
   if (!res.headersSent) {  
-
     return res  
       .status(500)  
       .send(  
