@@ -183,7 +183,7 @@ async function requireAuth(req, res, next) {
     /*
       Guarda o token real da sessão para que,
       posteriormente, o servidor possa chamar
-      a função segura de cota no Supabase.
+      as funções seguras de cota no Supabase.
     */
     req.accessToken = token;
 
@@ -309,6 +309,92 @@ async function reserveVideoQuota(
       result.message ||
       ""
   };
+}
+
+/* =========================================================
+   DEVOLVE COTA QUANDO O PROCESSAMENTO FALHA
+========================================================= */
+
+async function releaseVideoQuota(
+  userId,
+  accessToken,
+  amount
+) {
+
+  if (!amount || amount <= 0) {
+    return;
+  }
+
+  try {
+
+    const response =
+      await fetch(
+        SUPABASE_URL +
+          "/rest/v1/rpc/release_video_quota",
+        {
+          method: "POST",
+
+          headers: {
+            "Content-Type":
+              "application/json",
+
+            Authorization:
+              "Bearer " +
+              accessToken,
+
+            apikey:
+              SUPABASE_ANON_KEY
+          },
+
+          body:
+            JSON.stringify({
+              p_user_id:
+                userId,
+
+              p_amount:
+                amount
+            })
+        }
+      );
+
+    if (!response.ok) {
+
+      let details = "";
+
+      try {
+        const data =
+          await response.json();
+
+        details =
+          data?.message ||
+          data?.msg ||
+          data?.error_description ||
+          data?.error ||
+          "";
+      } catch {
+        details = "";
+      }
+
+      console.error(
+        "GeraMix: não foi possível devolver a cota.",
+        response.status,
+        details
+      );
+
+      return;
+    }
+
+    console.log(
+      `GeraMix: ${amount} vídeo(s) devolvido(s) para a cota mensal.`
+    );
+
+  } catch (error) {
+
+    console.error(
+      "GeraMix: erro ao devolver cota:",
+      error
+    );
+  }
 }
 
 /* =========================================================
@@ -1298,6 +1384,18 @@ app.post(
         console.error(
           "Erro no processamento:",
           e
+        );
+
+        /*
+          A cota foi reservada antes da preparação.
+          Como este lote falhou antes de ser concluído,
+          devolvemos toda a quantidade reservada.
+        */
+
+        await releaseVideoQuota(
+          req.user.id,
+          req.accessToken,
+          total
         );
 
         job.status =
