@@ -492,18 +492,8 @@ button:disabled{
 
 <script>
 
-/* =========================================================
-   SUPABASE
-   ========================================================= */
-
 let supabaseClient = null;
-
 let authReady = false;
-
-
-/* =========================================================
-   CONFIGURAÇÃO / LOGIN
-   ========================================================= */
 
 async function initializeAuth(){
 
@@ -517,33 +507,23 @@ async function initializeAuth(){
         }
       );
 
-
-    if(
-      !configResponse.ok
-    ){
-
+    if(!configResponse.ok){
       throw new Error(
         "Não foi possível carregar a configuração do servidor."
       );
-
     }
-
 
     const config =
       await configResponse.json();
-
 
     if(
       !config.supabaseUrl ||
       !config.supabaseAnonKey
     ){
-
       throw new Error(
         "Configuração do Supabase incompleta."
       );
-
     }
-
 
     supabaseClient =
       window.supabase.createClient(
@@ -558,14 +538,10 @@ async function initializeAuth(){
         }
       );
 
-
     let result =
       await supabaseClient.auth.getSession();
 
-
-    if(
-      result.error
-    ){
+    if(result.error){
 
       console.error(
         "Erro ao recuperar sessão:",
@@ -573,25 +549,17 @@ async function initializeAuth(){
       );
 
       throw result.error;
-
     }
-
 
     let session =
       result.data?.session;
 
-
-    if(
-      !session
-    ){
+    if(!session){
 
       const refresh =
         await supabaseClient.auth.refreshSession();
 
-
-      if(
-        refresh.error
-      ){
+      if(refresh.error){
 
         console.error(
           "Erro ao renovar sessão na inicialização:",
@@ -602,15 +570,11 @@ async function initializeAuth(){
           "/login.html";
 
         return false;
-
       }
-
 
       session =
         refresh.data?.session;
-
     }
-
 
     if(
       !session ||
@@ -621,12 +585,9 @@ async function initializeAuth(){
         "/login.html";
 
       return false;
-
     }
 
-
     authReady = true;
-
 
     return true;
 
@@ -637,42 +598,25 @@ async function initializeAuth(){
       error
     );
 
-
     window.location.href =
       "/login.html";
 
-
     return false;
-
   }
-
 }
-
-
-/* =========================================================
-   RENOVA SESSÃO
-   ========================================================= */
 
 async function refreshAuthSession(){
 
-  if(
-    !supabaseClient
-  ){
-
+  if(!supabaseClient){
     return false;
-
   }
-
 
   try{
 
     const result =
       await supabaseClient.auth.refreshSession();
 
-
-    if(
-      result.error
-    ){
+    if(result.error){
 
       console.error(
         "Erro Supabase ao renovar sessão:",
@@ -680,9 +624,7 @@ async function refreshAuthSession(){
       );
 
       return false;
-
     }
-
 
     if(
       !result.data?.session?.access_token
@@ -693,9 +635,7 @@ async function refreshAuthSession(){
       );
 
       return false;
-
     }
-
 
     return true;
 
@@ -707,80 +647,50 @@ async function refreshAuthSession(){
     );
 
     return false;
-
   }
-
 }
-
-
-/* =========================================================
-   OBTÉM TOKEN
-   ========================================================= */
 
 async function getAuthToken(
   forceRefresh = false
 ){
 
-  if(
-    !supabaseClient
-  ){
+  if(!supabaseClient){
 
     throw new Error(
       "Autenticação ainda não foi inicializada."
     );
-
   }
 
-
-  if(
-    !authReady
-  ){
+  if(!authReady){
 
     const initialized =
       await initializeAuth();
 
-
-    if(
-      !initialized
-    ){
+    if(!initialized){
 
       throw new Error(
         "Não foi possível confirmar o login."
       );
-
     }
-
   }
 
-
-  if(
-    forceRefresh
-  ){
+  if(forceRefresh){
 
     const refreshed =
       await refreshAuthSession();
 
-
-    if(
-      !refreshed
-    ){
+    if(!refreshed){
 
       throw new Error(
         "Não foi possível renovar sua sessão. Faça login novamente."
       );
-
     }
-
   }
-
 
   let result =
     await supabaseClient.auth.getSession();
 
-
-  if(
-    result.error
-  ){
+  if(result.error){
 
     console.error(
       "Erro ao obter sessão:",
@@ -790,13 +700,10 @@ async function getAuthToken(
     throw new Error(
       "Não foi possível acessar sua sessão."
     );
-
   }
-
 
   let session =
     result.data?.session;
-
 
   if(
     !session ||
@@ -806,25 +713,17 @@ async function getAuthToken(
     const refreshed =
       await refreshAuthSession();
 
-
-    if(
-      !refreshed
-    ){
+    if(!refreshed){
 
       throw new Error(
         "Sua sessão não está disponível. Faça login novamente."
       );
-
     }
-
 
     result =
       await supabaseClient.auth.getSession();
 
-
-    if(
-      result.error
-    ){
+    if(result.error){
 
       console.error(
         "Erro após renovação:",
@@ -834,15 +733,11 @@ async function getAuthToken(
       throw new Error(
         "Não foi possível recuperar sua sessão."
       );
-
     }
-
 
     session =
       result.data?.session;
-
   }
-
 
   if(
     !session ||
@@ -852,25 +747,19 @@ async function getAuthToken(
     throw new Error(
       "Sua sessão não está disponível. Faça login novamente."
     );
-
   }
 
-
-  if(
-    session.expires_at
-  ){
+  if(session.expires_at){
 
     const expiresAt =
       Number(
         session.expires_at
       );
 
-
     const now =
       Math.floor(
         Date.now() / 1000
       );
-
 
     if(
       expiresAt <= now + 60
@@ -879,14 +768,10 @@ async function getAuthToken(
       const refreshed =
         await refreshAuthSession();
 
-
-      if(
-        refreshed
-      ){
+      if(refreshed){
 
         result =
           await supabaseClient.auth.getSession();
-
 
         if(
           !result.error &&
@@ -895,15 +780,10 @@ async function getAuthToken(
 
           session =
             result.data.session;
-
         }
-
       }
-
     }
-
   }
-
 
   if(
     !session ||
@@ -913,18 +793,10 @@ async function getAuthToken(
     throw new Error(
       "Sua sessão expirou. Faça login novamente."
     );
-
   }
 
-
   return session.access_token;
-
 }
-
-
-/* =========================================================
-   CABEÇALHO
-   ========================================================= */
 
 async function authHeaders(
   forceRefresh = false
@@ -935,12 +807,10 @@ async function authHeaders(
       forceRefresh
     );
 
-
   return {
     "Authorization":
       "Bearer " + token
   };
-
 }
 
 
@@ -954,7 +824,6 @@ const D = {
   c:[]
 };
 
-
 const $ = id =>
   document.getElementById(id);
 
@@ -966,15 +835,41 @@ const $ = id =>
 function setup(
   id,
   k,
-  list
+  list,
+  max
 ){
 
   $(id).onchange = e => {
 
-    D[k] = [
+    const selected = [
       ...e.target.files
     ];
 
+    /*
+      TRAVA REAL DA TELA:
+
+      Ganchos = 5
+      Corpos = 5
+      CTAs = 6
+    */
+
+    if(
+      selected.length > max
+    ){
+
+      alert(
+        `Limite atingido: selecione no máximo ${max} vídeos nesta categoria.`
+      );
+
+      e.target.value = "";
+
+      D[k] = [];
+
+    }else{
+
+      D[k] = selected;
+
+    }
 
     $(list).innerHTML =
       D[k]
@@ -984,9 +879,7 @@ function setup(
         )
         .join("");
 
-
     update();
-
   };
 
 }
@@ -1021,7 +914,6 @@ function escapeHtml(
       /'/g,
       "&#039;"
     );
-
 }
 
 
@@ -1034,14 +926,11 @@ function update(){
   $("hn").textContent =
     D.h.length;
 
-
   $("bn").textContent =
     D.b.length;
 
-
   $("cn").textContent =
     D.c.length;
-
 
   $("total").textContent =
     (
@@ -1051,7 +940,6 @@ function update(){
     ).toLocaleString(
       "pt-BR"
     );
-
 }
 
 
@@ -1063,26 +951,15 @@ function originalityClass(
   value
 ){
 
-  if(
-    value >= 90
-  ){
-
+  if(value >= 90){
     return "high";
-
   }
 
-
-  if(
-    value >= 80
-  ){
-
+  if(value >= 80){
     return "medium";
-
   }
-
 
   return "low";
-
 }
 
 
@@ -1094,18 +971,13 @@ function renderOriginalitySummary(
   files
 ){
 
-  if(
-    !files.length
-  ){
+  if(!files.length){
 
     $("originalitySummary")
       .innerHTML = "";
 
-
     return;
-
   }
-
 
   const counts = {
     100:0,
@@ -1113,7 +985,6 @@ function renderOriginalitySummary(
     80:0,
     70:0
   };
-
 
   files.forEach(
     file => {
@@ -1123,7 +994,6 @@ function renderOriginalitySummary(
           file.originality
         );
 
-
       if(
         Object.prototype.hasOwnProperty.call(
           counts,
@@ -1132,12 +1002,9 @@ function renderOriginalitySummary(
       ){
 
         counts[value]++;
-
       }
-
     }
   );
-
 
   $("originalitySummary")
     .innerHTML = `
@@ -1181,9 +1048,7 @@ function renderOriginalitySummary(
         </div>
 
       </div>
-
   `;
-
 }
 
 
@@ -1199,7 +1064,6 @@ async function createAuthenticatedVideoUrl(
   const token =
     await getAuthToken();
 
-
   return (
     "/api/jobs/" +
     encodeURIComponent(
@@ -1214,30 +1078,32 @@ async function createAuthenticatedVideoUrl(
       token
     )
   );
-
 }
 
 
 /* =========================================================
-   SELETORES
+   SELETORES COM LIMITE CRAVADO
    ========================================================= */
 
 setup(
   "hooks",
   "h",
-  "hl"
+  "hl",
+  5
 );
 
 setup(
   "bodies",
   "b",
-  "bl"
+  "bl",
+  5
 );
 
 setup(
   "ctas",
   "c",
-  "cl"
+  "cl",
+  6
 );
 
 
@@ -1247,6 +1113,24 @@ setup(
 
 $("go").onclick =
   async () => {
+
+    /*
+      Segurança adicional no navegador.
+      Nunca permite enviar mais que 5/5/6.
+    */
+
+    if(
+      D.h.length > 5 ||
+      D.b.length > 5 ||
+      D.c.length > 6
+    ){
+
+      alert(
+        "Limite permitido: 5 ganchos, 5 corpos e 6 CTAs."
+      );
+
+      return;
+    }
 
     if(
       !D.h.length ||
@@ -1259,7 +1143,24 @@ $("go").onclick =
       );
 
       return;
+    }
 
+
+    const total =
+      D.h.length *
+      D.b.length *
+      D.c.length;
+
+
+    if(
+      total > 150
+    ){
+
+      alert(
+        "O limite máximo é de 150 combinações."
+      );
+
+      return;
     }
 
 
@@ -1365,7 +1266,6 @@ $("go").onclick =
           throw new Error(
             "O servidor recusou sua sessão. Faça login novamente."
           );
-
         }
 
 
@@ -1384,7 +1284,6 @@ $("go").onclick =
               body:fd
             }
           );
-
       }
 
 
@@ -1401,7 +1300,6 @@ $("go").onclick =
         throw new Error(
           `Resposta inválida do servidor. Código: ${r.status}`
         );
-
       }
 
 
@@ -1413,7 +1311,6 @@ $("go").onclick =
           j.error ||
           `Falha no envio. Código: ${r.status}`
         );
-
       }
 
 
@@ -1453,7 +1350,6 @@ $("go").onclick =
                 throw new Error(
                   "A sessão expirou durante o processamento. Faça login novamente."
                 );
-
               }
 
 
@@ -1471,7 +1367,6 @@ $("go").onclick =
                     headers
                   }
                 );
-
             }
 
 
@@ -1488,7 +1383,6 @@ $("go").onclick =
               throw new Error(
                 `Resposta inválida do servidor. Código: ${response.status}`
               );
-
             }
 
 
@@ -1500,7 +1394,6 @@ $("go").onclick =
                 x.error ||
                 `Falha ao consultar processamento. Código: ${response.status}`
               );
-
             }
 
 
@@ -1618,14 +1511,12 @@ $("go").onclick =
                   </div>
 
                 `);
-
               }
 
 
               $("result")
                 .innerHTML =
                 videoItems.join("");
-
             }
 
 
@@ -1668,7 +1559,6 @@ $("go").onclick =
 
 
               return;
-
             }
 
 
@@ -1681,7 +1571,6 @@ $("go").onclick =
                 x.error ||
                 "Processamento falhou."
               );
-
             }
 
 
@@ -1712,9 +1601,7 @@ $("go").onclick =
             $("go")
               .disabled =
               false;
-
           }
-
         };
 
 
@@ -1743,9 +1630,7 @@ $("go").onclick =
       $("go")
         .disabled =
         false;
-
     }
-
   };
 
 
