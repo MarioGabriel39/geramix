@@ -20,196 +20,195 @@ const UPLOADS = path.join(BASE, "uploads");
 const JOBS = path.join(BASE, "jobs");
 
 /* =========================================================
-SUPABASE
+   SUPABASE
 ========================================================= */
 
 const SUPABASE_URL =
-process.env.SUPABASE_URL;
+  process.env.SUPABASE_URL;
 
 const SUPABASE_ANON_KEY =
-process.env.SUPABASE_ANON_KEY;
+  process.env.SUPABASE_ANON_KEY;
 
 if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
-throw new Error(
-"SUPABASE_URL e SUPABASE_ANON_KEY precisam estar configuradas no Render."
-);
+  throw new Error(
+    "SUPABASE_URL e SUPABASE_ANON_KEY precisam estar configuradas no Render."
+  );
 }
 
 /* =========================================================
-DIRETÓRIOS
+   DIRETÓRIOS
 ========================================================= */
 
 await Promise.all([
-fsp.mkdir(UPLOADS, { recursive: true }),
-fsp.mkdir(JOBS, { recursive: true })
+  fsp.mkdir(UPLOADS, { recursive: true }),
+  fsp.mkdir(JOBS, { recursive: true })
 ]);
 
 /* =========================================================
-ARQUIVOS PÚBLICOS
+   ARQUIVOS PÚBLICOS
 ========================================================= */
 
 app.use(express.static(PUBLIC));
 
 /* =========================================================
-CONFIGURAÇÃO DO FRONT-END
+   CONFIGURAÇÃO DO FRONT-END
 ========================================================= */
 
 app.get("/api/config", (_, res) => {
-res.setHeader(
-"Cache-Control",
-"no-store"
-);
+  res.setHeader(
+    "Cache-Control",
+    "no-store"
+  );
 
-res.json({
-supabaseUrl: SUPABASE_URL,
-supabaseAnonKey: SUPABASE_ANON_KEY
-});
+  res.json({
+    supabaseUrl: SUPABASE_URL,
+    supabaseAnonKey: SUPABASE_ANON_KEY
+  });
 });
 
 /* =========================================================
-AUTENTICAÇÃO
+   AUTENTICAÇÃO
 ========================================================= */
 
 async function requireAuth(req, res, next) {
-try {
-const authorization =
-String(
-req.headers.authorization || ""
-).trim();
+  try {
+    const authorization =
+      String(
+        req.headers.authorization || ""
+      ).trim();
 
-let token = "";  
+    let token = "";
 
-if (  
-  authorization  
-    .toLowerCase()  
-    .startsWith("bearer ")  
-) {  
-  token =  
-    authorization  
-      .slice(7)  
-      .trim();  
-}  
+    if (
+      authorization
+        .toLowerCase()
+        .startsWith("bearer ")
+    ) {
+      token =
+        authorization
+          .slice(7)
+          .trim();
+    }
 
-if (!token) {  
-  token =  
-    String(  
-      req.query.token || ""  
-    ).trim();  
-}  
+    if (!token) {
+      token =
+        String(
+          req.query.token || ""
+        ).trim();
+    }
 
-if (!token) {  
-  console.error(  
-    "GeraMix: nenhuma sessão foi enviada."  
-  );  
+    if (!token) {
+      console.error(
+        "GeraMix: nenhuma sessão foi enviada."
+      );
 
-  return res.status(401).json({  
-    error:  
-      "Sessão não enviada."  
-  });  
-}  
+      return res.status(401).json({
+        error:
+          "Sessão não enviada."
+      });
+    }
 
-if (token.startsWith("sb_")) {  
-  console.error(  
-    "GeraMix: Publishable Key recebida no lugar do token do usuário."  
-  );  
+    if (token.startsWith("sb_")) {
+      console.error(
+        "GeraMix: Publishable Key recebida no lugar do token do usuário."
+      );
 
-  return res.status(401).json({  
-    error:  
-      "Token de usuário inválido."  
-  });  
-}  
+      return res.status(401).json({
+        error:
+          "Token de usuário inválido."
+      });
+    }
 
-const response =  
-  await fetch(  
-    `${SUPABASE_URL}/auth/v1/user`,  
-    {  
-      method: "GET",  
+    const response =
+      await fetch(
+        `${SUPABASE_URL}/auth/v1/user`,
+        {
+          method: "GET",
 
-      headers: {  
-        "Authorization":  
-          `Bearer ${token}`,  
+          headers: {
+            Authorization:
+              `Bearer ${token}`,
 
-        "apikey":  
-          SUPABASE_ANON_KEY  
-      }  
-    }  
-  );  
+            apikey:
+              SUPABASE_ANON_KEY
+          }
+        }
+      );
 
-if (!response.ok) {  
-  let details = "";  
+    if (!response.ok) {
+      let details = "";
 
-  try {  
-    const data =  
-      await response.json();  
+      try {
+        const data =
+          await response.json();
 
-    details =  
-      data?.msg ||  
-      data?.message ||  
-      data?.error_description ||  
-      data?.error ||  
-      "";  
-  } catch {  
-    details = "";  
-  }  
+        details =
+          data?.msg ||
+          data?.message ||
+          data?.error_description ||
+          data?.error ||
+          "";
+      } catch {
+        details = "";
+      }
 
-  console.error(  
-    "GeraMix: Supabase recusou o token.",  
-    response.status,  
-    details  
-  );  
+      console.error(
+        "GeraMix: Supabase recusou o token.",
+        response.status,
+        details
+      );
 
-  return res.status(401).json({  
-    error:  
-      "Sessão inválida ou expirada."  
-  });  
-}  
+      return res.status(401).json({
+        error:
+          "Sessão inválida ou expirada."
+      });
+    }
 
-const user =  
-  await response.json();  
+    const user =
+      await response.json();
 
-if (!user || !user.id) {  
-  console.error(  
-    "GeraMix: Supabase respondeu sem usuário."  
-  );  
+    if (!user || !user.id) {
+      console.error(
+        "GeraMix: Supabase respondeu sem usuário."
+      );
 
-  return res.status(401).json({  
-    error:  
-      "Sessão inválida ou expirada."  
-  });  
-}  
+      return res.status(401).json({
+        error:
+          "Sessão inválida ou expirada."
+      });
+    }
 
-req.user = user;  
+    req.user = user;
 
-next();
+    next();
 
-} catch (error) {
-console.error(
-"Erro ao validar sessão:",
-error
-);
+  } catch (error) {
+    console.error(
+      "Erro ao validar sessão:",
+      error
+    );
 
-return res.status(401).json({  
-  error:  
-    "Não foi possível validar sua sessão."  
-});
-
-}
+    return res.status(401).json({
+      error:
+        "Não foi possível validar sua sessão."
+    });
+  }
 }
 
 /* =========================================================
-HEALTH
+   HEALTH
 ========================================================= */
 
 app.get("/health", (_, res) => {
-res.json({
-ok: true,
-service: "geramix",
-ffmpeg: Boolean(ffmpegPath)
-});
+  res.json({
+    ok: true,
+    service: "geramix",
+    ffmpeg: Boolean(ffmpegPath)
+  });
 });
 
 /* =========================================================
-CONFIGURAÇÕES
+   CONFIGURAÇÕES
 ========================================================= */
 
 const FFMPEG_CONCURRENCY = 1;
@@ -217,1518 +216,1527 @@ const FFMPEG_CONCURRENCY = 1;
 const MAX_COMBINATIONS = 150;
 
 /* =========================================================
-FFMPEG
+   FFMPEG
 ========================================================= */
 
 function runFFmpeg(args, cwd) {
-return new Promise(
-(resolve, reject) => {
+  return new Promise(
+    (resolve, reject) => {
 
-const p =  
-    spawn(  
-      ffmpegPath,  
-      [  
-        "-hide_banner",  
-        "-loglevel",  
-        "error",  
+      const p =
+        spawn(
+          ffmpegPath,
+          [
+            "-hide_banner",
+            "-loglevel",
+            "error",
 
-        "-threads",  
-        "1",  
+            "-threads",
+            "1",
 
-        ...args  
-      ],  
-      {  
-        cwd  
-      }  
-    );  
+            ...args
+          ],
+          {
+            cwd
+          }
+        );
 
-  let err = "";  
+      let err = "";
 
-  p.stderr.on(  
-    "data",  
-    data => {  
-      err += data.toString();  
+      p.stderr.on(
+        "data",
+        data => {
+          err += data.toString();
 
-      if (err.length > 10000) {  
-        err =  
-          err.slice(-10000);  
-      }  
-    }  
-  );  
+          if (err.length > 10000) {
+            err =
+              err.slice(-10000);
+          }
+        }
+      );
 
-  p.on(  
-    "error",  
-    reject  
-  );  
+      p.on(
+        "error",
+        reject
+      );
 
-  p.on(  
-    "close",  
-    code => {  
+      p.on(
+        "close",
+        code => {
 
-      if (code === 0) {  
-        resolve();  
-      } else {  
-        reject(  
-          new Error(  
-            err.trim() ||  
-            `FFmpeg saiu com código ${code}`  
-          )  
-        );  
-      }  
+          if (code === 0) {
+            resolve();
+          } else {
+            reject(
+              new Error(
+                err.trim() ||
+                `FFmpeg saiu com código ${code}`
+              )
+            );
+          }
 
-    }  
-  );  
+        }
+      );
 
-}
-
-);
+    }
+  );
 }
 
 /* =========================================================
-VERIFICA ÁUDIO
+   VERIFICA ÁUDIO
 ========================================================= */
 
 async function hasAudio(input, cwd) {
-try {
+  try {
 
-await runFFmpeg(  
-  [  
-    "-i",  
-    input,  
+    await runFFmpeg(
+      [
+        "-i",
+        input,
 
-    "-map",  
-    "0:a:0",  
+        "-map",
+        "0:a:0",
 
-    "-frames:a",  
-    "0",  
+        "-frames:a",
+        "0",
 
-    "-f",  
-    "null",  
+        "-f",
+        "null",
 
-    "-"  
-  ],  
-  cwd  
-);  
+        "-"
+      ],
+      cwd
+    );
 
-return true;
+    return true;
 
-} catch {
-return false;
-}
+  } catch {
+    return false;
+  }
 }
 
 /* =========================================================
-NORMALIZA UM VÍDEO UMA ÚNICA VEZ
+   NORMALIZA UM VÍDEO UMA ÚNICA VEZ
 ========================================================= */
 
 async function normalizeVideo(
-input,
-output,
-cwd
+  input,
+  output,
+  cwd
 ) {
 
-const audio =
-await hasAudio(
-input,
-cwd
-);
+  const audio =
+    await hasAudio(
+      input,
+      cwd
+    );
 
-const args = [
-"-i",
-input
-];
+  const args = [
+    "-i",
+    input
+  ];
 
-if (!audio) {
-args.push(
-"-f",
-"lavfi",
-"-i",
-"anullsrc=r=48000:cl=stereo"
-);
-}
+  if (!audio) {
+    args.push(
+      "-f",
+      "lavfi",
+      "-i",
+      "anullsrc=r=48000:cl=stereo"
+    );
+  }
 
-args.push(
-"-map",
-"0:v:0",
+  args.push(
+    "-map",
+    "0:v:0",
 
-"-map",  
-audio  
-  ? "0:a:0"  
-  : "1:a:0",  
+    "-map",
+    audio
+      ? "0:a:0"
+      : "1:a:0",
 
-"-vf",  
-"scale=720:1280:force_original_aspect_ratio=decrease," +  
-"pad=720:1280:(ow-iw)/2:(oh-ih)/2," +  
-"setsar=1," +  
-"fps=30," +  
-"format=yuv420p",  
+    "-vf",
+    "scale=720:1280:force_original_aspect_ratio=decrease," +
+      "pad=720:1280:(ow-iw)/2:(oh-ih)/2," +
+      "setsar=1," +
+      "fps=30," +
+      "format=yuv420p",
 
-"-c:v",  
-"libx264",  
+    "-c:v",
+    "libx264",
 
-"-preset",  
-"ultrafast",  
+    "-preset",
+    "ultrafast",
 
-"-crf",  
-"28",  
+    "-crf",
+    "28",
 
-"-pix_fmt",  
-"yuv420p",  
+    "-pix_fmt",
+    "yuv420p",
 
-"-r",  
-"30",  
+    "-r",
+    "30",
 
-"-c:a",  
-"aac",  
+    "-c:a",
+    "aac",
 
-"-ar",  
-"48000",  
+    "-ar",
+    "48000",
 
-"-ac",  
-"2",  
+    "-ac",
+    "2",
 
-"-b:a",  
-"96k",  
+    "-b:a",
+    "96k",
 
-"-shortest",  
+    "-shortest",
 
-"-y",  
-output
+    "-y",
+    output
+  );
 
-);
-
-await runFFmpeg(
-args,
-cwd
-);
+  await runFFmpeg(
+    args,
+    cwd
+  );
 }
 
 /* =========================================================
-JUNTA 3 VÍDEOS NORMALIZADOS
+   JUNTA 3 VÍDEOS NORMALIZADOS
 ========================================================= */
 
 async function concatNormalized(
-files,
-output,
-cwd
+  files,
+  output,
+  cwd
 ) {
 
-const listFile =
-path.join(
-cwd,
-concat-${crypto.randomUUID()}.txt
-);
+  const listFile =
+    path.join(
+      cwd,
+      `concat-${crypto.randomUUID()}.txt`
+    );
 
-const content =
-files
-.map(
-file =>
-file '${path.basename(file).replace(/'/g, "'\\''")}'
-)
-.join("\n");
+  const content =
+    files
+      .map(
+        file =>
+          `file '${path.basename(file).replace(/'/g, "'\\''")}'`
+      )
+      .join("\n");
 
-await fsp.writeFile(
-listFile,
-content,
-"utf8"
-);
+  await fsp.writeFile(
+    listFile,
+    content,
+    "utf8"
+  );
 
-try {
+  try {
 
-await runFFmpeg(  
-  [  
-    "-f",  
-    "concat",  
+    await runFFmpeg(
+      [
+        "-f",
+        "concat",
 
-    "-safe",  
-    "0",  
+        "-safe",
+        "0",
 
-    "-i",  
-    listFile,  
+        "-i",
+        listFile,
 
-    "-c",  
-    "copy",  
+        "-c",
+        "copy",
 
-    "-y",  
-    output  
-  ],  
-  cwd  
-);
+        "-y",
+        output
+      ],
+      cwd
+    );
 
-} finally {
+  } finally {
 
-await fsp.rm(  
-  listFile,  
-  {  
-    force: true  
-  }  
-);
+    await fsp.rm(
+      listFile,
+      {
+        force: true
+      }
+    );
 
-}
+  }
 }
 
 /* =========================================================
-NOME SEGURO
+   NOME SEGURO
 ========================================================= */
 
 function safeName(name) {
-return String(
-name || "video"
-)
-.replace(
-/[^a-zA-Z0-9.-]/g,
-""
-)
-.slice(-100);
+  return String(
+    name || "video"
+  )
+    .replace(
+      /[^a-zA-Z0-9.*-]/g,
+      "*"
+    )
+    .slice(-100);
 }
 
 /* =========================================================
-ORIGINALIDADE
+   ORIGINALIDADE
 ========================================================= */
 
 function calculateOriginality(
-current,
-previous
+  current,
+  previous
 ) {
 
-if (!previous) {
-return 100;
-}
+  if (!previous) {
+    return 100;
+  }
 
-let different = 0;
+  let different = 0;
 
-if (
-current.hook.path !==
-previous.hook.path
-) {
-different++;
-}
+  if (
+    current.hook.path !==
+    previous.hook.path
+  ) {
+    different++;
+  }
 
-if (
-current.body.path !==
-previous.body.path
-) {
-different++;
-}
+  if (
+    current.body.path !==
+    previous.body.path
+  ) {
+    different++;
+  }
 
-if (
-current.cta.path !==
-previous.cta.path
-) {
-different++;
-}
+  if (
+    current.cta.path !==
+    previous.cta.path
+  ) {
+    different++;
+  }
 
-return 70 + different * 10;
+  return 70 + different * 10;
 }
 
 /* =========================================================
-UPLOAD
+   UPLOAD
 ========================================================= */
 
 const upload =
-multer({
-dest: UPLOADS,
+  multer({
+    dest: UPLOADS,
 
-limits: {  
-  files: 30,  
+    limits: {
+      files: 30,
 
-  fileSize:  
-    200 * 1024 * 1024  
-}
-
-});
+      fileSize:
+        200 * 1024 * 1024
+    }
+  });
 
 /* =========================================================
-JOBS
+   JOBS
 ========================================================= */
 
 const jobs = new Map();
 
 /* =========================================================
-OBTÉM OS VÍDEOS NORMALIZADOS DE UMA COMBINAÇÃO
+   OBTÉM OS VÍDEOS NORMALIZADOS DE UMA COMBINAÇÃO
 ========================================================= */
 
 function getCombinationFiles(
-job,
-file
+  job,
+  file
 ) {
 
-const dir =
-path.join(
-JOBS,
-job.id
-);
+  const dir =
+    path.join(
+      JOBS,
+      job.id
+    );
 
-const hook =
-path.join(
-dir,
-hook-${String(file.hookIndex).padStart(3, "0")}.mp4
-);
+  const hook =
+    path.join(
+      dir,
+      `hook-${String(file.hookIndex).padStart(3, "0")}.mp4`
+    );
 
-const body =
-path.join(
-dir,
-body-${String(file.bodyIndex).padStart(3, "0")}.mp4
-);
+  const body =
+    path.join(
+      dir,
+      `body-${String(file.bodyIndex).padStart(3, "0")}.mp4`
+    );
 
-const cta =
-path.join(
-dir,
-cta-${String(file.ctaIndex).padStart(3, "0")}.mp4
-);
+  const cta =
+    path.join(
+      dir,
+      `cta-${String(file.ctaIndex).padStart(3, "0")}.mp4`
+    );
 
-return [
-hook,
-body,
-cta
-];
+  return [
+    hook,
+    body,
+    cta
+  ];
 }
 
 /* =========================================================
-CRIA UM VÍDEO TEMPORÁRIO SOB DEMANDA
+   CRIA UM VÍDEO TEMPORÁRIO SOB DEMANDA
 ========================================================= */
 
 async function createVideoForJob(
-job,
-file
+  job,
+  file
 ) {
 
-const dir =
-path.join(
-JOBS,
-job.id
-);
+  const dir =
+    path.join(
+      JOBS,
+      job.id
+    );
 
-const tempName =
-temp-${crypto.randomUUID()}.mp4;
+  const tempName =
+    `temp-${crypto.randomUUID()}.mp4`;
 
-const output =
-path.join(
-dir,
-tempName
-);
+  const output =
+    path.join(
+      dir,
+      tempName
+    );
 
-const sources =
-getCombinationFiles(
-job,
-file
-);
+  const sources =
+    getCombinationFiles(
+      job,
+      file
+    );
 
-try {
+  try {
 
-await concatNormalized(  
-  sources,  
-  output,  
-  dir  
-);  
+    await concatNormalized(
+      sources,
+      output,
+      dir
+    );
 
-return output;
+    return output;
 
-} catch (error) {
+  } catch (error) {
 
-await fsp.rm(  
-  output,  
-  {  
-    force: true  
-  }  
-);  
+    await fsp.rm(
+      output,
+      {
+        force: true
+      }
+    );
 
-throw error;
-
-}
+    throw error;
+  }
 }
 
 /* =========================================================
-CRIA JOB
+   CRIA JOB
 ========================================================= */
 
 app.post(
-"/api/jobs",
+  "/api/jobs",
+
+  requireAuth,
 
-requireAuth,
+  upload.fields([
+    {
+      name: "hooks",
+      maxCount: 5
+    },
+
+    {
+      name: "bodies",
+      maxCount: 5
+    },
+
+    {
+      name: "ctas",
+      maxCount: 6
+    }
+  ]),
 
-upload.fields([
-{
-name: "hooks",
-maxCount: 5
-},
+  async (req, res) => {
 
-{  
-  name: "bodies",  
-  maxCount: 5  
-},  
+    const hooks =
+      req.files?.hooks || [];
 
-{  
-  name: "ctas",  
-  maxCount: 6  
-}
+    const bodies =
+      req.files?.bodies || [];
 
-]),
+    const ctas =
+      req.files?.ctas || [];
 
-async (req, res) => {
+    if (
+      !hooks.length ||
+      !bodies.length ||
+      !ctas.length
+    ) {
 
-const hooks =  
-  req.files?.hooks || [];  
+      return res.status(400).json({
+        error:
+          "Envie pelo menos 1 vídeo em cada categoria."
+      });
+    }
 
-const bodies =  
-  req.files?.bodies || [];  
+    const total =
+      hooks.length *
+      bodies.length *
+      ctas.length;
 
-const ctas =  
-  req.files?.ctas || [];  
-
-if (  
-  !hooks.length ||  
-  !bodies.length ||  
-  !ctas.length  
-) {  
-
-  return res.status(400).json({  
-    error:  
-      "Envie pelo menos 1 vídeo em cada categoria."  
-  });  
-}  
-
-const total =  
-  hooks.length *  
-  bodies.length *  
-  ctas.length;  
-
-if (  
-  total >  
-  MAX_COMBINATIONS  
-) {  
-
-  return res.status(400).json({  
-    error:  
-      `Limite de ${MAX_COMBINATIONS} combinações por lote.`  
-  });  
-}  
-
-const id =  
-  crypto.randomUUID();  
-
-const dir =  
-  path.join(  
-    JOBS,  
-    id  
-  );  
-
-await fsp.mkdir(  
-  dir,  
-  {  
-    recursive: true  
-  }  
-);  
-
-const job = {  
-  id,  
-
-  userId:  
-    req.user.id,  
-
-  status:  
-    "processing",  
-
-  total,  
-
-  done:  
-    0,  
-
-  current:  
-    "Iniciando…",  
-
-  files: [],  
-
-  error:  
-    null,  
-
-  mode:  
-    "montagem-sob-demanda"  
-};  
-
-jobs.set(  
-  id,  
-  job  
-);  
-
-res.json({  
-  id,  
-  total  
-});  
-
-
-/* =====================================================  
-   PROCESSAMENTO  
-   ===================================================== */  
-
-(async () => {  
-
-  const normalizedHooks = [];  
-  const normalizedBodies = [];  
-  const normalizedCtas = [];  
-
-  try {  
-
-    /* ================================================  
-       1. GANCHOS  
-       ================================================ */  
-
-    job.current =  
-      "Preparando ganchos…";  
-
-    for (  
-      let i = 0;  
-      i < hooks.length;  
-      i++  
-    ) {  
-
-      const file =  
-        hooks[i];  
-
-      const output =  
-        path.join(  
-          dir,  
-          `hook-${String(i + 1).padStart(3, "0")}.mp4`  
-        );  
-
-      await normalizeVideo(  
-        file.path,  
-        output,  
-        dir  
-      );  
-
-      normalizedHooks.push({  
-        source:  
-          file,  
-
-        path:  
-          output  
-      });  
-
-      await fsp.rm(  
-        file.path,  
-        {  
-          force: true  
-        }  
-      );  
-    }  
-
-
-    /* ================================================  
-       2. CORPOS  
-       ================================================ */  
-
-    job.current =  
-      "Preparando corpos…";  
-
-    for (  
-      let i = 0;  
-      i < bodies.length;  
-      i++  
-    ) {  
-
-      const file =  
-        bodies[i];  
-
-      const output =  
-        path.join(  
-          dir,  
-          `body-${String(i + 1).padStart(3, "0")}.mp4`  
-        );  
-
-      await normalizeVideo(  
-        file.path,  
-        output,  
-        dir  
-      );  
-
-      normalizedBodies.push({  
-        source:  
-          file,  
-
-        path:  
-          output  
-      });  
-
-      await fsp.rm(  
-        file.path,  
-        {  
-          force: true  
-        }  
-      );  
-    }  
-
-
-    /* ================================================  
-       3. CTAs  
-       ================================================ */  
-
-    job.current =  
-      "Preparando CTAs…";  
-
-    for (  
-      let i = 0;  
-      i < ctas.length;  
-      i++  
-    ) {  
-
-      const file =  
-        ctas[i];  
-
-      const output =  
-        path.join(  
-          dir,  
-          `cta-${String(i + 1).padStart(3, "0")}.mp4`  
-        );  
-
-      await normalizeVideo(  
-        file.path,  
-        output,  
-        dir  
-      );  
-
-      normalizedCtas.push({  
-        source:  
-          file,  
-
-        path:  
-          output  
-      });  
-
-      await fsp.rm(  
-        file.path,  
-        {  
-          force: true  
-        }  
-      );  
-    }  
-
-
-    /* ================================================  
-       4. PREPARA AS COMBINAÇÕES  
-
-       IMPORTANTE:  
-       Aqui NÃO criamos os 150 MP4.  
-       Apenas registramos as combinações.  
-       ================================================ */  
-
-    job.current =  
-      "Preparando combinações…";  
-
-    let index = 0;  
-
-    for (  
-      let hookIndex = 0;  
-      hookIndex < normalizedHooks.length;  
-      hookIndex++  
-    ) {  
-
-      for (  
-        let bodyIndex = 0;  
-        bodyIndex < normalizedBodies.length;  
-        bodyIndex++  
-      ) {  
-
-        for (  
-          let ctaIndex = 0;  
-          ctaIndex < normalizedCtas.length;  
-          ctaIndex++  
-        ) {  
-
-          index++;  
-
-          const hook =  
-            normalizedHooks[  
-              hookIndex  
-            ];  
-
-          const body =  
-            normalizedBodies[  
-              bodyIndex  
-            ];  
-
-          const cta =  
-            normalizedCtas[  
-              ctaIndex  
-            ];  
-
-          job.current =  
-            `Preparando vídeos: ${index}/${total}`;  
-
-
-          /* ==========================================  
-             ORIGINALIDADE  
-             ========================================== */  
-
-          const currentCombination = {  
-            hook: {  
-              path:  
-                hook.source.path  
-            },  
-
-            body: {  
-              path:  
-                body.source.path  
-            },  
-
-            cta: {  
-              path:  
-                cta.source.path  
-            }  
-          };  
-
-          const previousIndex =  
-            index - 2;  
-
-          const previousCombination =  
-            previousIndex >= 0  
-              ? {  
-                  hook: {  
-                    path:  
-                      normalizedHooks[  
-                        Math.floor(  
-                          previousIndex /  
-                          (  
-                            normalizedBodies.length *  
-                            normalizedCtas.length  
-                          )  
-                        )  
-                      ]?.source.path  
-                  },  
-
-                  body: {  
-                    path:  
-                      normalizedBodies[  
-                        Math.floor(  
-                          (  
-                            previousIndex /  
-                            normalizedCtas.length  
-                          ) %  
-                          normalizedBodies.length  
-                        )  
-                      ]?.source.path  
-                  },  
-
-                  cta: {  
-                    path:  
-                      normalizedCtas[  
-                        previousIndex %  
-                        normalizedCtas.length  
-                      ]?.source.path  
-                  }  
-                }  
-              : null;  
-
-          const originality =  
-            calculateOriginality(  
-              currentCombination,  
-              previousCombination  
-            );  
-
-
-          /* ==========================================  
-             SALVA SOMENTE OS DADOS  
-
-             O MP4 NÃO É SALVO AQUI.  
-             ========================================== */  
-
-          job.files.push({  
-
-            name:  
-              `video-${String(index).padStart(3, "0")}.mp4`,  
-
-            hook:  
-              safeName(  
-                hook.source.originalname  
-              ),  
-
-            body:  
-              safeName(  
-                body.source.originalname  
-              ),  
-
-            cta:  
-              safeName(  
-                cta.source.originalname  
-              ),  
-
-            hookIndex:  
-              hookIndex + 1,  
-
-            bodyIndex:  
-              bodyIndex + 1,  
-
-            ctaIndex:  
-              ctaIndex + 1,  
-
-            index,  
-
-            originality  
-          });  
-
-          job.done =  
-            index;  
-        }  
-      }  
-    }  
-
-
-    /* ================================================  
-       5. ORDENA  
-       ================================================ */  
-
-    job.files.sort(  
-      (a, b) =>  
-        a.index - b.index  
-    );  
-
-
-    /* ================================================  
-       6. FINALIZADO  
-
-       O ZIP será montado quando o usuário clicar  
-       em baixar ZIP.  
-       ================================================ */  
-
-    job.current =  
-      "Concluído";  
-
-    job.status =  
-      "done";  
-
-    job.zip =  
-      `/api/jobs/${id}/zip`;  
-
-  } catch (e) {  
-
-    console.error(  
-      "Erro no processamento:",  
-      e  
-    );  
-
-    job.status =  
-      "error";  
-
-    job.error =  
-      e?.message ||  
-      "Erro desconhecido";  
-
-    job.current =  
-      "Falhou";  
-
-    await Promise.all(  
-      [  
-        ...hooks,  
-        ...bodies,  
-        ...ctas  
-      ].map(  
-        file =>  
-          fsp.rm(  
-            file.path,  
-            {  
-              force: true  
-            }  
-          )  
-      )  
-    );  
-  }  
-
-})();
-
-}
+    if (
+      total >
+      MAX_COMBINATIONS
+    ) {
+
+      return res.status(400).json({
+        error:
+          `Limite de ${MAX_COMBINATIONS} combinações por lote.`
+      });
+    }
+
+    const id =
+      crypto.randomUUID();
+
+    const dir =
+      path.join(
+        JOBS,
+        id
+      );
+
+    await fsp.mkdir(
+      dir,
+      {
+        recursive: true
+      }
+    );
+
+    const job = {
+      id,
+
+      userId:
+        req.user.id,
+
+      status:
+        "processing",
+
+      total,
+
+      done:
+        0,
+
+      current:
+        "Iniciando…",
+
+      files: [],
+
+      error:
+        null,
+
+      mode:
+        "montagem-sob-demanda"
+    };
+
+    jobs.set(
+      id,
+      job
+    );
+
+    res.json({
+      id,
+      total
+    });
+
+    /* =====================================================
+       PROCESSAMENTO
+    ===================================================== */
+
+    (async () => {
+
+      const normalizedHooks = [];
+      const normalizedBodies = [];
+      const normalizedCtas = [];
+
+      try {
+
+        /* ================================================
+           1. GANCHOS
+        ================================================ */
+
+        job.current =
+          "Preparando ganchos…";
+
+        for (
+          let i = 0;
+          i < hooks.length;
+          i++
+        ) {
+
+          const file =
+            hooks[i];
+
+          const output =
+            path.join(
+              dir,
+              `hook-${String(i + 1).padStart(3, "0")}.mp4`
+            );
+
+          await normalizeVideo(
+            file.path,
+            output,
+            dir
+          );
+
+          normalizedHooks.push({
+            source:
+              file,
+
+            path:
+              output
+          });
+
+          await fsp.rm(
+            file.path,
+            {
+              force: true
+            }
+          );
+        }
+
+        /* ================================================
+           2. CORPOS
+        ================================================ */
+
+        job.current =
+          "Preparando corpos…";
+
+        for (
+          let i = 0;
+          i < bodies.length;
+          i++
+        ) {
+
+          const file =
+            bodies[i];
+
+          const output =
+            path.join(
+              dir,
+              `body-${String(i + 1).padStart(3, "0")}.mp4`
+            );
+
+          await normalizeVideo(
+            file.path,
+            output,
+            dir
+          );
+
+          normalizedBodies.push({
+            source:
+              file,
+
+            path:
+              output
+          });
+
+          await fsp.rm(
+            file.path,
+            {
+              force: true
+            }
+          );
+        }
+
+        /* ================================================
+           3. CTAs
+        ================================================ */
+
+        job.current =
+          "Preparando CTAs…";
+
+        for (
+          let i = 0;
+          i < ctas.length;
+          i++
+        ) {
+
+          const file =
+            ctas[i];
+
+          const output =
+            path.join(
+              dir,
+              `cta-${String(i + 1).padStart(3, "0")}.mp4`
+            );
+
+          await normalizeVideo(
+            file.path,
+            output,
+            dir
+          );
+
+          normalizedCtas.push({
+            source:
+              file,
+
+            path:
+              output
+          });
+
+          await fsp.rm(
+            file.path,
+            {
+              force: true
+            }
+          );
+        }
+
+        /* ================================================
+           4. PREPARA AS COMBINAÇÕES
+
+           NÃO cria os 150 MP4 aqui.
+           Apenas registra as combinações.
+        ================================================ */
+
+        job.current =
+          "Preparando combinações…";
+
+        let index = 0;
+
+        for (
+          let hookIndex = 0;
+          hookIndex < normalizedHooks.length;
+          hookIndex++
+        ) {
+
+          for (
+            let bodyIndex = 0;
+            bodyIndex < normalizedBodies.length;
+            bodyIndex++
+          ) {
+
+            for (
+              let ctaIndex = 0;
+              ctaIndex < normalizedCtas.length;
+              ctaIndex++
+            ) {
+
+              index++;
+
+              const hook =
+                normalizedHooks[
+                  hookIndex
+                ];
+
+              const body =
+                normalizedBodies[
+                  bodyIndex
+                ];
+
+              const cta =
+                normalizedCtas[
+                  ctaIndex
+                ];
+
+              job.current =
+                `Preparando vídeos: ${index}/${total}`;
+
+              /* ==========================================
+                 ORIGINALIDADE
+              ========================================== */
+
+              const currentCombination = {
+                hook: {
+                  path:
+                    hook.source.path
+                },
+
+                body: {
+                  path:
+                    body.source.path
+                },
+
+                cta: {
+                  path:
+                    cta.source.path
+                }
+              };
+
+              const previousIndex =
+                index - 2;
+
+              const previousCombination =
+                previousIndex >= 0
+                  ? {
+                      hook: {
+                        path:
+                          normalizedHooks[
+                            Math.floor(
+                              previousIndex /
+                              (
+                                normalizedBodies.length *
+                                normalizedCtas.length
+                              )
+                            )
+                          ]?.source.path
+                      },
+
+                      body: {
+                        path:
+                          normalizedBodies[
+                            Math.floor(
+                              (
+                                previousIndex /
+                                normalizedCtas.length
+                              ) %
+                              normalizedBodies.length
+                            )
+                          ]?.source.path
+                      },
+
+                      cta: {
+                        path:
+                          normalizedCtas[
+                            previousIndex %
+                            normalizedCtas.length
+                          ]?.source.path
+                      }
+                    }
+                  : null;
+
+              const originality =
+                calculateOriginality(
+                  currentCombination,
+                  previousCombination
+                );
+
+              /* ==========================================
+                 SALVA SOMENTE OS DADOS
+              ========================================== */
+
+              job.files.push({
+
+                name:
+                  `video-${String(index).padStart(3, "0")}.mp4`,
+
+                hook:
+                  safeName(
+                    hook.source.originalname
+                  ),
+
+                body:
+                  safeName(
+                    body.source.originalname
+                  ),
+
+                cta:
+                  safeName(
+                    cta.source.originalname
+                  ),
+
+                hookIndex:
+                  hookIndex + 1,
+
+                bodyIndex:
+                  bodyIndex + 1,
+
+                ctaIndex:
+                  ctaIndex + 1,
+
+                index,
+
+                originality
+              });
+
+              job.done =
+                index;
+            }
+          }
+        }
+
+        /* ================================================
+           5. ORDENA
+        ================================================ */
+
+        job.files.sort(
+          (a, b) =>
+            a.index - b.index
+        );
+
+        /* ================================================
+           6. FINALIZADO
+
+           O ZIP é montado quando o usuário clicar.
+        ================================================ */
+
+        job.current =
+          "Concluído";
+
+        job.status =
+          "done";
+
+        job.zip =
+          `/api/jobs/${id}/zip`;
+
+      } catch (e) {
+
+        console.error(
+          "Erro no processamento:",
+          e
+        );
+
+        job.status =
+          "error";
+
+        job.error =
+          e?.message ||
+          "Erro desconhecido";
+
+        job.current =
+          "Falhou";
+
+        await Promise.all(
+          [
+            ...hooks,
+            ...bodies,
+            ...ctas
+          ].map(
+            file =>
+              fsp.rm(
+                file.path,
+                {
+                  force: true
+                }
+              )
+          )
+        );
+      }
+
+    })();
+
+  }
 );
 
 /* =========================================================
-CONSULTA JOB
+   CONSULTA JOB
 ========================================================= */
 
 app.get(
-"/api/jobs/:id",
+  "/api/jobs/:id",
 
-requireAuth,
+  requireAuth,
 
-(req, res) => {
+  (req, res) => {
 
-const job =  
-  jobs.get(  
-    req.params.id  
-  );  
+    const job =
+      jobs.get(
+        req.params.id
+      );
 
-if (!job) {  
+    if (!job) {
 
-  return res.status(404).json({  
-    error:  
-      "Processamento não encontrado."  
-  });  
-}  
+      return res.status(404).json({
+        error:
+          "Processamento não encontrado."
+      });
+    }
 
-if (  
-  job.userId !==  
-  req.user.id  
-) {  
+    if (
+      job.userId !==
+      req.user.id
+    ) {
 
-  return res.status(404).json({  
-    error:  
-      "Processamento não encontrado."  
-  });  
-}  
+      return res.status(404).json({
+        error:
+          "Processamento não encontrado."
+      });
+    }
 
-res.json(job);
-
-}
+    res.json(job);
+  }
 );
 
 /* =========================================================
-DOWNLOAD ZIP
+   DOWNLOAD ZIP
 ========================================================= */
 
 app.get(
-"/api/jobs/:id/zip",
+  "/api/jobs/:id/zip",
 
-requireAuth,
+  requireAuth,
 
-async (req, res) => {
+  async (req, res) => {
 
-const job =  
-  jobs.get(  
-    req.params.id  
-  );  
+    const job =
+      jobs.get(
+        req.params.id
+      );
 
-if (!job) {  
+    if (!job) {
 
-  return res  
-    .status(404)  
-    .send(  
-      "Processamento não encontrado."  
-    );  
-}  
+      return res
+        .status(404)
+        .send(
+          "Processamento não encontrado."
+        );
+    }
 
-if (  
-  job.userId !==  
-  req.user.id  
-) {  
+    if (
+      job.userId !==
+      req.user.id
+    ) {
 
-  return res  
-    .status(404)  
-    .send(  
-      "Processamento não encontrado."  
-    );  
-}  
+      return res
+        .status(404)
+        .send(
+          "Processamento não encontrado."
+        );
+    }
 
-if (  
-  job.status !==  
-  "done"  
-) {  
+    if (
+      job.status !==
+      "done"
+    ) {
 
-  return res  
-    .status(400)  
-    .send(  
-      "O processamento ainda não terminou."  
-    );  
-}  
+      return res
+        .status(400)
+        .send(
+          "O processamento ainda não terminou."
+        );
+    }
 
-res.statusCode = 200;  
+    res.statusCode = 200;
 
-res.setHeader(  
-  "Content-Type",  
-  "application/zip"  
-);  
+    res.setHeader(
+      "Content-Type",
+      "application/zip"
+    );
 
-res.setHeader(  
-  "Content-Disposition",  
-  'attachment; filename="geramix-videos.zip"'  
-);  
+    res.setHeader(
+      "Content-Disposition",
+      'attachment; filename="geramix-videos.zip"'
+    );
 
-const archive =  
-  archiver(  
-    "zip",  
-    {  
-      zlib: {  
-        level: 0  
-      }  
-    }  
-  );  
+    const archive =
+      archiver(
+        "zip",
+        {
+          zlib: {
+            level: 0
+          }
+        }
+      );
 
-archive.on(  
-  "error",  
-  error => {  
-    console.error(  
-      "Erro criando ZIP:",  
-      error  
-    );  
+    archive.on(
+      "error",
+      error => {
 
-    if (!res.headersSent) {  
-      res.status(500).send(  
-        "Erro ao criar ZIP."  
-      );  
-    } else {  
-      res.destroy(error);  
-    }  
-  }  
-);  
+        console.error(
+          "Erro criando ZIP:",
+          error
+        );
 
-archive.pipe(res);  
+        if (!res.headersSent) {
 
-try {  
+          res
+            .status(500)
+            .send(
+              "Erro ao criar ZIP."
+            );
 
-  for (  
-    const file  
-    of job.files  
-  ) {  
+        } else {
 
-    const tempVideo =  
-      await createVideoForJob(  
-        job,  
-        file  
-      );  
+          res.destroy(error);
 
-    try {  
+        }
+      }
+    );
 
-      await new Promise(  
-        (resolve, reject) => {  
+    archive.pipe(res);
 
-          const input =  
-            fs.createReadStream(  
-              tempVideo  
-            );  
+    try {
 
-          input.on(  
-            "error",  
-            reject  
-          );  
+      for (
+        const file
+        of job.files
+      ) {
 
-          input.on(  
-            "close",  
-            resolve  
-          );  
+        const tempVideo =
+          await createVideoForJob(
+            job,
+            file
+          );
 
-          archive.append(  
-            input,  
-            {  
-              name:  
-                file.name  
-            }  
-          );  
+        try {
 
-        }  
-      );  
+          await new Promise(
+            (resolve, reject) => {
 
-    } finally {  
+              const input =
+                fs.createReadStream(
+                  tempVideo
+                );
 
-      await fsp.rm(  
-        tempVideo,  
-        {  
-          force: true  
-        }  
-      );  
-    }  
-  }  
+              input.on(
+                "error",
+                reject
+              );
 
-  await archive.finalize();  
+              input.on(
+                "close",
+                resolve
+              );
 
-} catch (error) {  
+              archive.append(
+                input,
+                {
+                  name:
+                    file.name
+                }
+              );
 
-  console.error(  
-    "Erro no download ZIP:",  
-    error  
-  );  
+            }
+          );
 
-  await fsp.rm(  
-    path.join(  
-      JOBS,  
-      job.id  
-    ),  
-    {  
-      recursive: true,  
-      force: true  
-    }  
-  ).catch(() => {});  
+        } finally {
 
-  if (!res.headersSent) {  
-    return res  
-      .status(500)  
-      .send(  
-        "Erro ao criar ZIP."  
-      );  
-  }  
+          await fsp.rm(
+            tempVideo,
+            {
+              force: true
+            }
+          );
 
-  res.destroy(error);  
-}
+        }
+      }
 
-}
+      await archive.finalize();
+
+    } catch (error) {
+
+      console.error(
+        "Erro no download ZIP:",
+        error
+      );
+
+      await fsp.rm(
+        path.join(
+          JOBS,
+          job.id
+        ),
+        {
+          recursive: true,
+          force: true
+        }
+      ).catch(() => {});
+
+      if (!res.headersSent) {
+
+        return res
+          .status(500)
+          .send(
+            "Erro ao criar ZIP."
+          );
+      }
+
+      res.destroy(error);
+    }
+
+  }
 );
 
 /* =========================================================
-DOWNLOAD / VISUALIZAÇÃO DE VÍDEO
+   DOWNLOAD / VISUALIZAÇÃO DE VÍDEO
 ========================================================= */
 
 app.get(
-"/api/jobs/:id/video/:name",
+  "/api/jobs/:id/video/:name",
 
-requireAuth,
+  requireAuth,
 
-async (req, res) => {
+  async (req, res) => {
 
-const job =  
-  jobs.get(  
-    req.params.id  
-  );  
+    const job =
+      jobs.get(
+        req.params.id
+      );
 
-if (!job) {  
-  return res.sendStatus(404);  
-}  
+    if (!job) {
+      return res.sendStatus(404);
+    }
 
-if (  
-  job.userId !==  
-  req.user.id  
-) {  
-  return res.sendStatus(404);  
-}  
+    if (
+      job.userId !==
+      req.user.id
+    ) {
+      return res.sendStatus(404);
+    }
 
-const name =  
-  safeName(  
-    req.params.name  
-  );  
+    const name =
+      safeName(
+        req.params.name
+      );
 
-const file =  
-  job.files.find(  
-    item =>  
-      item.name === name  
-  );  
+    const file =
+      job.files.find(
+        item =>
+          item.name === name
+      );
 
-if (!file) {  
-  return res.sendStatus(404);  
-}  
+    if (!file) {
+      return res.sendStatus(404);
+    }
 
-let tempVideo = null;  
+    let tempVideo = null;
 
-try {  
+    try {
 
-  tempVideo =  
-    await createVideoForJob(  
-      job,  
-      file  
-    );  
+      tempVideo =
+        await createVideoForJob(
+          job,
+          file
+        );
 
-  const stat =  
-    await fsp.stat(  
-      tempVideo  
-    );  
+      const stat =
+        await fsp.stat(
+          tempVideo
+        );
 
-  const size =  
-    stat.size;  
+      const size =
+        stat.size;
 
-  const range =  
-    req.headers.range;  
+      const range =
+        req.headers.range;
 
-  res.setHeader(  
-    "Content-Type",  
-    "video/mp4"  
-  );  
+      res.setHeader(
+        "Content-Type",
+        "video/mp4"
+      );
 
-  res.setHeader(  
-    "Accept-Ranges",  
-    "bytes"  
-  );  
+      res.setHeader(
+        "Accept-Ranges",
+        "bytes"
+      );
 
-  res.setHeader(  
-    "Cache-Control",  
-    "no-store"  
-  );  
+      res.setHeader(
+        "Cache-Control",
+        "no-store"
+      );
 
-  if (!range) {  
+      if (!range) {
 
-    res.setHeader(  
-      "Content-Length",  
-      size  
-    );  
+        res.setHeader(
+          "Content-Length",
+          size
+        );
 
-    res.setHeader(  
-      "Content-Disposition",  
-      `inline; filename="${name}"`  
-    );  
+        res.setHeader(
+          "Content-Disposition",
+          `inline; filename="${name}"`
+        );
 
-    const stream =  
-      fs.createReadStream(  
-        tempVideo  
-      );  
+        const stream =
+          fs.createReadStream(
+            tempVideo
+          );
 
-    stream.on(  
-      "close",  
-      () => {  
-        fsp.rm(  
-          tempVideo,  
-          {  
-            force: true  
-          }  
-        ).catch(() => {});  
-      }  
-    );  
+        stream.on(
+          "close",
+          () => {
 
-    stream.on(  
-      "error",  
-      error => {  
-        console.error(  
-          "Erro enviando vídeo:",  
-          error  
-        );  
+            fsp.rm(
+              tempVideo,
+              {
+                force: true
+              }
+            ).catch(() => {});
 
-        fsp.rm(  
-          tempVideo,  
-          {  
-            force: true  
-          }  
-        ).catch(() => {});  
+          }
+        );
 
-        if (!res.headersSent) {  
-          res.sendStatus(500);  
-        } else {  
-          res.destroy(error);  
-        }  
-      }  
-    );  
+        stream.on(
+          "error",
+          error => {
 
-    return stream.pipe(res);  
-  }  
+            console.error(
+              "Erro enviando vídeo:",
+              error
+            );
 
+            fsp.rm(
+              tempVideo,
+              {
+                force: true
+              }
+            ).catch(() => {});
 
-  const matches =  
-    range.match(  
-      /bytes=(\d*)-(\d*)/  
-    );  
+            if (!res.headersSent) {
 
-  if (!matches) {  
+              res.sendStatus(500);
 
-    await fsp.rm(  
-      tempVideo,  
-      {  
-        force: true  
-      }  
-    );  
+            } else {
 
-    return res  
-      .status(416)  
-      .set(  
-        "Content-Range",  
-        `bytes */${size}`  
-      )  
-      .end();  
-  }  
+              res.destroy(error);
 
-  let start =  
-    matches[1]  
-      ? Number(matches[1])  
-      : 0;  
+            }
 
-  let end =  
-    matches[2]  
-      ? Number(matches[2])  
-      : size - 1;  
+          }
+        );
 
-  if (  
-    !matches[1] &&  
-    matches[2]  
-  ) {  
-    const suffixLength =  
-      Number(matches[2]);  
+        return stream.pipe(res);
+      }
 
-    start =  
-      Math.max(  
-        0,  
-        size - suffixLength  
-      );  
+      const matches =
+        range.match(
+          /bytes=(\d*)-(\d*)/
+        );
 
-    end =  
-      size - 1;  
-  }  
+      if (!matches) {
 
-  if (  
-    start < 0 ||  
-    start >= size ||  
-    end < start  
-  ) {  
+        await fsp.rm(
+          tempVideo,
+          {
+            force: true
+          }
+        );
 
-    await fsp.rm(  
-      tempVideo,  
-      {  
-        force: true  
-      }  
-    );  
+        return res
+          .status(416)
+          .set(
+            "Content-Range",
+            `bytes */${size}`
+          )
+          .end();
+      }
 
-    return res  
-      .status(416)  
-      .set(  
-        "Content-Range",  
-        `bytes */${size}`  
-      )  
-      .end();  
-  }  
+      let start =
+        matches[1]
+          ? Number(matches[1])
+          : 0;
 
-  end =  
-    Math.min(  
-      end,  
-      size - 1  
-    );  
+      let end =
+        matches[2]
+          ? Number(matches[2])
+          : size - 1;
 
-  const chunkSize =  
-    end - start + 1;  
+      if (
+        !matches[1] &&
+        matches[2]
+      ) {
 
-  res.statusCode = 206;  
+        const suffixLength =
+          Number(matches[2]);
 
-  res.setHeader(  
-    "Content-Range",  
-    `bytes ${start}-${end}/${size}`  
-  );  
+        start =
+          Math.max(
+            0,
+            size - suffixLength
+          );
 
-  res.setHeader(  
-    "Content-Length",  
-    chunkSize  
-  );  
+        end =
+          size - 1;
+      }
 
-  res.setHeader(  
-    "Content-Disposition",  
-    `inline; filename="${name}"`  
-  );  
+      if (
+        start < 0 ||
+        start >= size ||
+        end < start
+      ) {
 
-  const stream =  
-    fs.createReadStream(  
-      tempVideo,  
-      {  
-        start,  
-        end  
-      }  
-    );  
+        await fsp.rm(
+          tempVideo,
+          {
+            force: true
+          }
+        );
 
-  stream.on(  
-    "close",  
-    () => {  
-      fsp.rm(  
-        tempVideo,  
-        {  
-          force: true  
-        }  
-      ).catch(() => {});  
-    }  
-  );  
+        return res
+          .status(416)
+          .set(
+            "Content-Range",
+            `bytes */${size}`
+          )
+          .end();
+      }
 
-  stream.on(  
-    "error",  
-    error => {  
-      console.error(  
-        "Erro enviando trecho do vídeo:",  
-        error  
-      );  
+      end =
+        Math.min(
+          end,
+          size - 1
+        );
 
-      fsp.rm(  
-        tempVideo,  
-        {  
-          force: true  
-        }  
-      ).catch(() => {});  
+      const chunkSize =
+        end - start + 1;
 
-      if (!res.headersSent) {  
-        res.sendStatus(500);  
-      } else {  
-        res.destroy(error);  
-      }  
-    }  
-  );  
+      res.statusCode = 206;
 
-  stream.pipe(res);  
+      res.setHeader(
+        "Content-Range",
+        `bytes ${start}-${end}/${size}`
+      );
 
-} catch (error) {  
+      res.setHeader(
+        "Content-Length",
+        chunkSize
+      );
 
-  if (tempVideo) {  
-    await fsp.rm(  
-      tempVideo,  
-      {  
-        force: true  
-      }  
-    ).catch(() => {});  
-  }  
+      res.setHeader(
+        "Content-Disposition",
+        `inline; filename="${name}"`
+      );
 
-  console.error(  
-    "Erro montando vídeo:",  
-    error  
-  );  
+      const stream =
+        fs.createReadStream(
+          tempVideo,
+          {
+            start,
+            end
+          }
+        );
 
-  if (!res.headersSent) {  
-    return res  
-      .status(500)  
-      .send(  
-        "Erro ao montar o vídeo."  
-      );  
-  }  
+      stream.on(
+        "close",
+        () => {
 
-  res.destroy(error);  
-}
+          fsp.rm(
+            tempVideo,
+            {
+              force: true
+            }
+          ).catch(() => {});
 
-}
+        }
+      );
+
+      stream.on(
+        "error",
+        error => {
+
+          console.error(
+            "Erro enviando trecho do vídeo:",
+            error
+          );
+
+          fsp.rm(
+            tempVideo,
+            {
+              force: true
+            }
+          ).catch(() => {});
+
+          if (!res.headersSent) {
+
+            res.sendStatus(500);
+
+          } else {
+
+            res.destroy(error);
+
+          }
+
+        }
+      );
+
+      stream.pipe(res);
+
+    } catch (error) {
+
+      if (tempVideo) {
+
+        await fsp.rm(
+          tempVideo,
+          {
+            force: true
+          }
+        ).catch(() => {});
+
+      }
+
+      console.error(
+        "Erro montando vídeo:",
+        error
+      );
+
+      if (!res.headersSent) {
+
+        return res
+          .status(500)
+          .send(
+            "Erro ao montar o vídeo."
+          );
+      }
+
+      res.destroy(error);
+    }
+
+  }
 );
 
 /* =========================================================
-ERROS
+   ERROS
 ========================================================= */
 
 app.use(
-(
-error,
-req,
-res,
-next
-) => {
+  (
+    error,
+    req,
+    res,
+    next
+  ) => {
 
-if (  
-  error instanceof  
-  multer.MulterError  
-) {  
+    if (
+      error instanceof
+      multer.MulterError
+    ) {
 
-  console.error(  
-    "Erro Multer:",  
-    error  
-  );  
+      console.error(
+        "Erro Multer:",
+        error
+      );
 
-  return res.status(400).json({  
-    error:  
-      "Erro no envio dos vídeos: " +  
-      error.message  
-  });  
-}  
+      return res.status(400).json({
+        error:
+          "Erro no envio dos vídeos: " +
+          error.message
+      });
+    }
 
-if (error) {  
+    if (error) {
 
-  console.error(  
-    "Erro no servidor:",  
-    error  
-  );  
+      console.error(
+        "Erro no servidor:",
+        error
+      );
 
-  return res.status(500).json({  
-    error:  
-      error.message ||  
-      "Erro interno do servidor."  
-  });  
-}  
+      return res.status(500).json({
+        error:
+          error.message ||
+          "Erro interno do servidor."
+      });
+    }
 
-next();
-
-}
+    next();
+  }
 );
 
 /* =========================================================
-SERVIDOR
+   SERVIDOR
 ========================================================= */
 
 app.listen(
-PORT,
-() => {
+  PORT,
+  () => {
 
-console.log(  
-  `GeraMix rodando na porta ${PORT}`  
-);  
+    console.log(
+      `GeraMix rodando na porta ${PORT}`
+    );
 
-console.log(  
-  `FFmpeg simultâneos: ${FFMPEG_CONCURRENCY}`  
-);
+    console.log(
+      `FFmpeg simultâneos: ${FFMPEG_CONCURRENCY}`
+    );
 
-}
+  }
 );
