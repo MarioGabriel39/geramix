@@ -413,7 +413,14 @@ app.get("/health", (_, res) => {
    CONFIGURAÇÕES
 ========================================================= */
 
-const FFMPEG_CONCURRENCY = 1;
+/*
+  Quantos processos FFmpeg podem trabalhar
+  simultaneamente durante a preparação.
+
+  Cada FFmpeg continua limitado a 1 thread
+  individualmente.
+*/
+const FFMPEG_CONCURRENCY = 3;
 
 const MAX_COMBINATIONS = 150;
 
@@ -600,6 +607,127 @@ async function normalizeVideo(
     args,
     cwd
   );
+}
+
+/* =========================================================
+   NORMALIZA VÁRIOS VÍDEOS COM CONCORRÊNCIA CONTROLADA
+========================================================= */
+
+async function normalizeVideosWithConcurrency(
+  files,
+  category,
+  dir,
+  job
+) {
+
+  const results =
+    new Array(files.length);
+
+  let nextIndex = 0;
+
+  let firstError = null;
+
+  async function worker() {
+
+    while (true) {
+
+      const index =
+        nextIndex++;
+
+      if (
+        index >= files.length
+      ) {
+        return;
+      }
+
+      const file =
+        files[index];
+
+      const output =
+        path.join(
+          dir,
+          `${category}-${String(index + 1).padStart(3, "0")}.mp4`
+        );
+
+      try {
+
+        job.current =
+          `Preparando ${category}: ${index + 1}/${files.length}`;
+
+        await normalizeVideo(
+          file.path,
+          output,
+          dir
+        );
+
+        results[index] = {
+          source:
+            file,
+
+          path:
+            output
+        };
+
+        await fsp.rm(
+          file.path,
+          {
+            force: true
+          }
+        );
+
+      } catch (error) {
+
+        if (!firstError) {
+          firstError = error;
+        }
+
+        /*
+          Remove o arquivo parcialmente criado,
+          caso o FFmpeg tenha deixado um arquivo
+          incompleto.
+        */
+        await fsp.rm(
+          output,
+          {
+            force: true
+          }
+        ).catch(() => {});
+
+        /*
+          Remove o upload original deste item.
+        */
+        await fsp.rm(
+          file.path,
+          {
+            force: true
+          }
+        ).catch(() => {});
+      }
+    }
+  }
+
+  const workerCount =
+    Math.min(
+      FFMPEG_CONCURRENCY,
+      files.length
+    );
+
+  await Promise.all(
+    Array.from(
+      {
+        length:
+          workerCount
+      },
+      () =>
+        worker()
+    )
+  );
+
+  if (firstError) {
+    throw firstError;
+  }
+
+  return results;
 }
 
 /* =========================================================
@@ -1072,42 +1200,17 @@ app.post(
         job.current =
           "Preparando ganchos…";
 
-        for (
-          let i = 0;
-          i < hooks.length;
-          i++
-        ) {
-
-          const file =
-            hooks[i];
-
-          const output =
-            path.join(
-              dir,
-              `hook-${String(i + 1).padStart(3, "0")}.mp4`
-            );
-
-          await normalizeVideo(
-            file.path,
-            output,
-            dir
+        const hookResults =
+          await normalizeVideosWithConcurrency(
+            hooks,
+            "hook",
+            dir,
+            job
           );
 
-          normalizedHooks.push({
-            source:
-              file,
-
-            path:
-              output
-          });
-
-          await fsp.rm(
-            file.path,
-            {
-              force: true
-            }
-          );
-        }
+        normalizedHooks.push(
+          ...hookResults
+        );
 
         /* ================================================
            2. CORPOS
@@ -1116,42 +1219,17 @@ app.post(
         job.current =
           "Preparando corpos…";
 
-        for (
-          let i = 0;
-          i < bodies.length;
-          i++
-        ) {
-
-          const file =
-            bodies[i];
-
-          const output =
-            path.join(
-              dir,
-              `body-${String(i + 1).padStart(3, "0")}.mp4`
-            );
-
-          await normalizeVideo(
-            file.path,
-            output,
-            dir
+        const bodyResults =
+          await normalizeVideosWithConcurrency(
+            bodies,
+            "body",
+            dir,
+            job
           );
 
-          normalizedBodies.push({
-            source:
-              file,
-
-            path:
-              output
-          });
-
-          await fsp.rm(
-            file.path,
-            {
-              force: true
-            }
-          );
-        }
+        normalizedBodies.push(
+          ...bodyResults
+        );
 
         /* ================================================
            3. CTAs
@@ -1160,42 +1238,17 @@ app.post(
         job.current =
           "Preparando CTAs…";
 
-        for (
-          let i = 0;
-          i < ctas.length;
-          i++
-        ) {
-
-          const file =
-            ctas[i];
-
-          const output =
-            path.join(
-              dir,
-              `cta-${String(i + 1).padStart(3, "0")}.mp4`
-            );
-
-          await normalizeVideo(
-            file.path,
-            output,
-            dir
+        const ctaResults =
+          await normalizeVideosWithConcurrency(
+            ctas,
+            "cta",
+            dir,
+            job
           );
 
-          normalizedCtas.push({
-            source:
-              file,
-
-            path:
-              output
-          });
-
-          await fsp.rm(
-            file.path,
-            {
-              force: true
-            }
-          );
-        }
+        normalizedCtas.push(
+          ...ctaResults
+        );
 
         /* ================================================
            4. PREPARA AS COMBINAÇÕES
