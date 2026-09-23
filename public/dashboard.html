@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
   <title>Dashboard — GeraMix</title>
 
   <style>
@@ -12,213 +13,930 @@
       padding: 0;
     }
 
+    :root {
+      --bg: #070b18;
+      --bg-soft: #0d1326;
+      --card: rgba(255, 255, 255, 0.065);
+      --card-border: rgba(255, 255, 255, 0.10);
+      --text: #ffffff;
+      --muted: #94a3b8;
+      --muted-light: #cbd5e1;
+      --primary: #6366f1;
+      --primary-light: #818cf8;
+      --green: #22c55e;
+      --green-light: #86efac;
+      --danger: #ef4444;
+      --shadow: 0 25px 70px rgba(0, 0, 0, 0.35);
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
     body {
-      font-family: Arial, sans-serif;
       min-height: 100vh;
-      background: linear-gradient(135deg, #0f172a, #1e1b4b);
-      color: #fff;
-      padding: 20px;
+      font-family: Arial, Helvetica, sans-serif;
+      color: var(--text);
+
+      background:
+        radial-gradient(
+          circle at 10% 0%,
+          rgba(99, 102, 241, 0.22),
+          transparent 30%
+        ),
+        radial-gradient(
+          circle at 90% 10%,
+          rgba(139, 92, 246, 0.16),
+          transparent 28%
+        ),
+        linear-gradient(
+          135deg,
+          #060914 0%,
+          #0b1020 45%,
+          #11152c 100%
+        );
+
+      padding: 24px;
+    }
+
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+
+      background:
+        linear-gradient(
+          rgba(255,255,255,0.018) 1px,
+          transparent 1px
+        ),
+        linear-gradient(
+          90deg,
+          rgba(255,255,255,0.018) 1px,
+          transparent 1px
+        );
+
+      background-size: 45px 45px;
+      mask-image: linear-gradient(
+        to bottom,
+        black,
+        transparent 80%
+      );
     }
 
     .container {
       width: 100%;
-      max-width: 1100px;
+      max-width: 1180px;
       margin: 0 auto;
+      position: relative;
+      z-index: 1;
     }
+
+    /* =========================
+       HEADER
+    ========================= */
 
     header {
       display: flex;
-      justify-content: space-between;
       align-items: center;
-      gap: 15px;
-      margin-bottom: 30px;
+      justify-content: space-between;
+      gap: 20px;
+
+      padding: 8px 0 28px;
+
+      border-bottom: 1px solid
+        rgba(255, 255, 255, 0.08);
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .brand-icon {
+      width: 48px;
+      height: 48px;
+
+      display: flex;
+      align-items: center;
+      justify-content: center;
+
+      border-radius: 15px;
+
+      background:
+        linear-gradient(
+          135deg,
+          #6366f1,
+          #8b5cf6
+        );
+
+      box-shadow:
+        0 10px 30px
+        rgba(99, 102, 241, 0.35);
+
+      font-size: 22px;
+      font-weight: 900;
     }
 
     .logo {
-      font-size: 28px;
-      font-weight: 800;
+      font-size: 25px;
+      font-weight: 900;
+      letter-spacing: -0.7px;
     }
 
     .subtitle {
-      color: #cbd5e1;
-      margin-top: 5px;
+      color: var(--muted);
+      font-size: 13px;
+      margin-top: 3px;
+    }
+
+    .header-right {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .account-mini {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+
+      padding: 8px 12px;
+
+      border-radius: 14px;
+
+      background: rgba(255,255,255,0.045);
+      border: 1px solid
+        rgba(255,255,255,0.08);
+    }
+
+    .account-avatar {
+      width: 34px;
+      height: 34px;
+
+      display: flex;
+      align-items: center;
+      justify-content: center;
+
+      border-radius: 50%;
+
+      background: #1e293b;
+      color: #c7d2fe;
+
+      font-weight: 800;
       font-size: 14px;
     }
 
+    .account-email-header {
+      max-width: 220px;
+
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+
+      color: var(--muted-light);
+      font-size: 13px;
+    }
+
     .logout {
-      border: 0;
-      padding: 10px 16px;
-      border-radius: 10px;
-      background: #334155;
+      border: 1px solid
+        rgba(255,255,255,0.10);
+
+      padding: 11px 16px;
+
+      border-radius: 12px;
+
+      background: rgba(255,255,255,0.05);
       color: #fff;
+
       cursor: pointer;
-      font-weight: 600;
+
+      font-weight: 700;
+      font-size: 13px;
+
+      transition:
+        background 0.2s ease,
+        transform 0.2s ease;
     }
 
     .logout:hover {
-      background: #475569;
+      background: rgba(255,255,255,0.10);
+      transform: translateY(-1px);
     }
 
+    /* =========================
+       WELCOME
+    ========================= */
+
     .welcome {
-      margin-bottom: 25px;
+      margin: 42px 0 28px;
+
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 30px;
+    }
+
+    .welcome-text {
+      max-width: 720px;
+    }
+
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+
+      padding: 7px 11px;
+
+      border-radius: 999px;
+
+      background: rgba(99,102,241,0.10);
+      border: 1px solid
+        rgba(129,140,248,0.18);
+
+      color: #c7d2fe;
+
+      font-size: 12px;
+      font-weight: 800;
+
+      margin-bottom: 15px;
+    }
+
+    .eyebrow-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--green);
+
+      box-shadow:
+        0 0 12px
+        rgba(34,197,94,0.8);
     }
 
     .welcome h1 {
-      font-size: 30px;
-      margin-bottom: 8px;
+      font-size: clamp(30px, 5vw, 44px);
+      line-height: 1.05;
+
+      letter-spacing: -1.5px;
+
+      margin-bottom: 12px;
+    }
+
+    .welcome h1 span {
+      background:
+        linear-gradient(
+          90deg,
+          #a5b4fc,
+          #c4b5fd
+        );
+
+      -webkit-background-clip: text;
+      background-clip: text;
+
+      color: transparent;
     }
 
     .welcome p {
-      color: #cbd5e1;
+      color: var(--muted);
+      font-size: 15px;
+      line-height: 1.6;
     }
 
-    .grid {
+    .account-email {
+      margin-top: 12px;
+
+      color: #64748b;
+
+      font-size: 12px;
+
+      word-break: break-word;
+    }
+
+    /* =========================
+       MAIN STATS
+    ========================= */
+
+    .stats-grid {
       display: grid;
-      grid-template-columns: repeat(2, 1fr);
+
+      grid-template-columns:
+        repeat(4, 1fr);
+
+      gap: 16px;
+
+      margin-bottom: 18px;
+    }
+
+    .stat-card {
+      position: relative;
+
+      padding: 21px;
+
+      min-height: 150px;
+
+      border-radius: 20px;
+
+      background:
+        linear-gradient(
+          145deg,
+          rgba(255,255,255,0.075),
+          rgba(255,255,255,0.035)
+        );
+
+      border: 1px solid var(--card-border);
+
+      box-shadow:
+        0 12px 35px
+        rgba(0,0,0,0.16);
+
+      overflow: hidden;
+
+      transition:
+        transform 0.25s ease,
+        border-color 0.25s ease;
+    }
+
+    .stat-card:hover {
+      transform: translateY(-3px);
+
+      border-color:
+        rgba(129,140,248,0.28);
+    }
+
+    .stat-glow {
+      position: absolute;
+
+      width: 100px;
+      height: 100px;
+
+      border-radius: 50%;
+
+      right: -45px;
+      top: -45px;
+
+      background:
+        rgba(99,102,241,0.16);
+
+      filter: blur(10px);
+    }
+
+    .stat-label {
+      color: var(--muted);
+
+      font-size: 12px;
+      font-weight: 700;
+
+      text-transform: uppercase;
+      letter-spacing: 0.7px;
+
+      margin-bottom: 17px;
+    }
+
+    .stat-value {
+      font-size: 27px;
+      font-weight: 900;
+
+      letter-spacing: -0.8px;
+
+      margin-bottom: 7px;
+    }
+
+    .stat-description {
+      color: #64748b;
+
+      font-size: 12px;
+    }
+
+    .green {
+      color: var(--green-light);
+    }
+
+    /* =========================
+       MAIN GRID
+    ========================= */
+
+    .main-grid {
+      display: grid;
+
+      grid-template-columns:
+        minmax(0, 1.45fr)
+        minmax(300px, 0.8fr);
+
       gap: 18px;
     }
 
     .card {
-      background: rgba(255, 255, 255, 0.08);
-      border: 1px solid rgba(255, 255, 255, 0.12);
-      border-radius: 18px;
-      padding: 22px;
-      backdrop-filter: blur(10px);
+      background:
+        linear-gradient(
+          145deg,
+          rgba(255,255,255,0.075),
+          rgba(255,255,255,0.035)
+        );
+
+      border: 1px solid var(--card-border);
+
+      border-radius: 22px;
+
+      padding: 25px;
+
+      box-shadow: var(--shadow);
+
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
     }
 
-    .card h2 {
+    .card-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 15px;
+
+      margin-bottom: 22px;
+    }
+
+    .card-title {
       font-size: 18px;
-      margin-bottom: 15px;
-    }
-
-    .plan {
-      font-size: 25px;
       font-weight: 800;
-      margin-bottom: 8px;
+
+      margin-bottom: 6px;
     }
 
-    .price {
-      color: #cbd5e1;
-      margin-bottom: 20px;
+    .card-description {
+      color: var(--muted);
+
+      font-size: 13px;
+      line-height: 1.5;
     }
 
-    .usage {
-      font-size: 28px;
-      font-weight: 800;
-      margin-bottom: 8px;
+    /* =========================
+       USAGE
+    ========================= */
+
+    .usage-number {
+      font-size: 40px;
+      font-weight: 900;
+
+      letter-spacing: -1.5px;
+
+      margin-bottom: 4px;
     }
 
-    .available {
-      color: #cbd5e1;
+    .usage-number span {
+      color: #64748b;
+      font-size: 18px;
+      font-weight: 700;
     }
 
-    .account-email {
-      color: #cbd5e1;
-      margin-top: 8px;
-      word-break: break-word;
-    }
+    .available-big {
+      color: var(--green-light);
 
-    .renewal {
-      color: #cbd5e1;
-      margin-top: 12px;
       font-size: 14px;
+      font-weight: 700;
+
+      margin-bottom: 22px;
     }
 
     .progress-container {
       width: 100%;
       height: 14px;
-      background: rgba(255, 255, 255, 0.12);
+
+      background:
+        rgba(255,255,255,0.07);
+
       border-radius: 999px;
+
       overflow: hidden;
-      margin-top: 18px;
+
+      border: 1px solid
+        rgba(255,255,255,0.06);
     }
 
     .progress-bar {
       height: 100%;
       width: 0%;
-      background: #6366f1;
+
+      background:
+        linear-gradient(
+          90deg,
+          #6366f1,
+          #8b5cf6,
+          #a78bfa
+        );
+
       border-radius: 999px;
-      transition: width 0.5s ease;
+
+      transition:
+        width 0.6s ease;
+
+      box-shadow:
+        0 0 18px
+        rgba(129,140,248,0.45);
     }
 
     .progress-info {
       display: flex;
       justify-content: space-between;
       gap: 10px;
-      margin-top: 8px;
-      color: #cbd5e1;
-      font-size: 13px;
+
+      margin-top: 10px;
+
+      color: var(--muted);
+
+      font-size: 12px;
     }
 
-    .actions {
-      margin-top: 18px;
-      display: grid;
-      gap: 12px;
-    }
+    .usage-message {
+      margin-top: 20px;
 
-    .action {
-      display: block;
-      text-decoration: none;
-      text-align: center;
-      padding: 14px;
+      padding: 12px 14px;
+
       border-radius: 12px;
-      background: #6366f1;
-      color: #fff;
-      font-weight: 700;
+
+      background:
+        rgba(99,102,241,0.055);
+
+      border: 1px solid
+        rgba(99,102,241,0.10);
+
+      color: #94a3b8;
+
+      font-size: 12px;
+      line-height: 1.5;
     }
 
-    .action:hover {
-      background: #818cf8;
+    /* =========================
+       PLAN
+    ========================= */
+
+    .plan-box {
+      padding: 20px;
+
+      border-radius: 17px;
+
+      background:
+        linear-gradient(
+          135deg,
+          rgba(99,102,241,0.13),
+          rgba(139,92,246,0.07)
+        );
+
+      border: 1px solid
+        rgba(129,140,248,0.16);
     }
 
-    .secondary {
-      background: #334155;
+    .plan-name {
+      font-size: 25px;
+      font-weight: 900;
+
+      margin-bottom: 7px;
     }
 
-    .secondary:hover {
-      background: #475569;
+    .plan-price {
+      color: var(--muted-light);
+
+      font-size: 14px;
+
+      margin-bottom: 17px;
     }
 
     .status {
-      display: inline-block;
-      padding: 7px 12px;
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+
+      padding: 7px 11px;
+
       border-radius: 999px;
-      background: #166534;
-      color: #dcfce7;
+
+      background:
+        rgba(34,197,94,0.11);
+
+      border: 1px solid
+        rgba(34,197,94,0.18);
+
+      color: var(--green-light);
+
+      font-size: 12px;
+      font-weight: 800;
+    }
+
+    .status-dot {
+      width: 7px;
+      height: 7px;
+
+      border-radius: 50%;
+
+      background: var(--green);
+
+      box-shadow:
+        0 0 10px
+        rgba(34,197,94,0.8);
+    }
+
+    .renewal {
+      color: var(--muted);
+
+      font-size: 12px;
+
+      margin-top: 17px;
+    }
+
+    /* =========================
+       ACTIONS
+    ========================= */
+
+    .action-main {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+
+      padding: 20px;
+
+      border-radius: 17px;
+
+      text-decoration: none;
+
+      background:
+        linear-gradient(
+          135deg,
+          #6366f1,
+          #7c3aed
+        );
+
+      color: #fff;
+
+      box-shadow:
+        0 15px 35px
+        rgba(99,102,241,0.25);
+
+      transition:
+        transform 0.2s ease,
+        box-shadow 0.2s ease;
+    }
+
+    .action-main:hover {
+      transform: translateY(-2px);
+
+      box-shadow:
+        0 20px 45px
+        rgba(99,102,241,0.35);
+    }
+
+    .action-icon {
+      width: 45px;
+      height: 45px;
+
+      flex-shrink: 0;
+
+      display: flex;
+      align-items: center;
+      justify-content: center;
+
+      border-radius: 13px;
+
+      background:
+        rgba(255,255,255,0.15);
+
+      font-size: 21px;
+    }
+
+    .action-text {
+      flex: 1;
+    }
+
+    .action-title {
+      font-size: 15px;
+      font-weight: 900;
+
+      margin-bottom: 4px;
+    }
+
+    .action-description {
+      font-size: 12px;
+
+      color:
+        rgba(255,255,255,0.75);
+    }
+
+    .action-arrow {
+      font-size: 22px;
+      opacity: 0.8;
+    }
+
+    .secondary-action {
+      display: block;
+
+      margin-top: 12px;
+
+      padding: 14px;
+
+      border-radius: 13px;
+
+      text-align: center;
+
+      text-decoration: none;
+
+      background:
+        rgba(255,255,255,0.045);
+
+      border: 1px solid
+        rgba(255,255,255,0.08);
+
+      color: var(--muted-light);
+
       font-size: 13px;
       font-weight: 700;
+
+      transition:
+        background 0.2s ease;
     }
 
-    .loading {
-      color: #cbd5e1;
-      margin-top: 10px;
+    .secondary-action:hover {
+      background:
+        rgba(255,255,255,0.08);
     }
+
+    /* =========================
+       HOW IT WORKS
+    ========================= */
+
+    .how-section {
+      margin-top: 18px;
+    }
+
+    .steps {
+      display: grid;
+
+      grid-template-columns:
+        repeat(3, 1fr);
+
+      gap: 14px;
+    }
+
+    .step {
+      padding: 20px;
+
+      border-radius: 17px;
+
+      background:
+        rgba(255,255,255,0.035);
+
+      border: 1px solid
+        rgba(255,255,255,0.07);
+    }
+
+    .step-number {
+      width: 34px;
+      height: 34px;
+
+      display: flex;
+      align-items: center;
+      justify-content: center;
+
+      border-radius: 10px;
+
+      background:
+        rgba(99,102,241,0.13);
+
+      color: #a5b4fc;
+
+      font-weight: 900;
+      font-size: 13px;
+
+      margin-bottom: 14px;
+    }
+
+    .step h3 {
+      font-size: 14px;
+
+      margin-bottom: 7px;
+    }
+
+    .step p {
+      color: var(--muted);
+
+      font-size: 12px;
+      line-height: 1.55;
+    }
+
+    /* =========================
+       FOOTER
+    ========================= */
+
+    footer {
+      padding: 28px 5px 10px;
+
+      display: flex;
+      justify-content: space-between;
+      gap: 15px;
+
+      color: #475569;
+
+      font-size: 11px;
+    }
+
+    /* =========================
+       ERROR
+    ========================= */
 
     .error {
-      color: #fecaca;
-      margin-top: 10px;
-      font-size: 14px;
+      color: #fecaca !important;
+
+      background:
+        rgba(239,68,68,0.08);
+
+      border-color:
+        rgba(239,68,68,0.15);
     }
 
-    @media (max-width: 700px) {
+    /* =========================
+       RESPONSIVE
+    ========================= */
+
+    @media (max-width: 900px) {
+      .stats-grid {
+        grid-template-columns:
+          repeat(2, 1fr);
+      }
+
+      .main-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media (max-width: 650px) {
       body {
         padding: 14px;
       }
 
       header {
-        align-items: flex-start;
+        padding-bottom: 20px;
       }
 
-      .grid {
-        grid-template-columns: 1fr;
+      .header-right {
+        gap: 7px;
       }
 
-      .welcome h1 {
-        font-size: 25px;
+      .account-mini {
+        display: none;
+      }
+
+      .brand-icon {
+        width: 43px;
+        height: 43px;
       }
 
       .logo {
-        font-size: 24px;
+        font-size: 22px;
+      }
+
+      .welcome {
+        margin-top: 30px;
+
+        display: block;
+      }
+
+      .welcome h1 {
+        font-size: 32px;
+      }
+
+      .stats-grid {
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+      }
+
+      .stat-card {
+        min-height: 135px;
+        padding: 16px;
+      }
+
+      .stat-value {
+        font-size: 22px;
+      }
+
+      .card {
+        padding: 20px;
+        border-radius: 19px;
+      }
+
+      .steps {
+        grid-template-columns: 1fr;
+      }
+
+      footer {
+        flex-direction: column;
+        text-align: center;
+      }
+    }
+
+    @media (max-width: 420px) {
+      .stats-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .usage-number {
+        font-size: 34px;
       }
     }
   </style>
@@ -228,70 +946,241 @@
 
   <div class="container">
 
+    <!-- HEADER -->
+
     <header>
-      <div>
-        <div class="logo">GeraMix</div>
-        <div class="subtitle">Seu painel de vídeos</div>
+
+      <div class="brand">
+
+        <div class="brand-icon">
+          G
+        </div>
+
+        <div>
+          <div class="logo">
+            GeraMix
+          </div>
+
+          <div class="subtitle">
+            Seu painel de vídeos
+          </div>
+        </div>
+
       </div>
 
-      <button class="logout" id="logout">
-        Sair
-      </button>
+      <div class="header-right">
+
+        <div class="account-mini">
+
+          <div class="account-avatar">
+            👤
+          </div>
+
+          <div
+            class="account-email-header"
+            id="headerEmail"
+          >
+            Carregando...
+          </div>
+
+        </div>
+
+        <button
+          class="logout"
+          id="logout"
+        >
+          Sair
+        </button>
+
+      </div>
+
     </header>
 
+
+    <!-- WELCOME -->
+
     <section class="welcome">
-      <h1>Olá! 👋</h1>
 
-      <p>
-        Bem-vindo ao seu painel do GeraMix.
-      </p>
+      <div class="welcome-text">
 
-      <div class="account-email" id="userEmail">
-        Carregando sua conta...
+        <div class="eyebrow">
+          <span class="eyebrow-dot"></span>
+          Painel do cliente
+        </div>
+
+        <h1>
+          Olá! 👋
+          <br>
+          <span>Vamos criar seus vídeos.</span>
+        </h1>
+
+        <p>
+          Acompanhe sua assinatura, veja seu consumo
+          mensal e acesse o GeraMix sempre que quiser.
+        </p>
+
+        <div
+          class="account-email"
+          id="userEmail"
+        >
+          Carregando sua conta...
+        </div>
+
       </div>
+
     </section>
 
-    <div class="grid">
 
-      <div class="card">
-        <h2>Seu plano</h2>
+    <!-- STATS -->
 
-        <div class="plan" id="planName">
+    <section class="stats-grid">
+
+      <div class="stat-card">
+
+        <div class="stat-glow"></div>
+
+        <div class="stat-label">
+          Plano atual
+        </div>
+
+        <div
+          class="stat-value"
+          id="planNameStat"
+        >
           GeraMix
         </div>
 
-        <div class="price" id="planPrice">
-          R$ 29,90 / mês
-        </div>
-
-        <span class="status" id="subscriptionStatus">
+        <div
+          class="stat-description"
+          id="planPriceStat"
+        >
           Carregando...
-        </span>
-
-        <div class="renewal" id="renewal">
-          Próxima renovação: carregando...
         </div>
+
       </div>
 
+
+      <div class="stat-card">
+
+        <div class="stat-glow"></div>
+
+        <div class="stat-label">
+          Vídeos utilizados
+        </div>
+
+        <div
+          class="stat-value"
+          id="usedStat"
+        >
+          —
+        </div>
+
+        <div class="stat-description">
+          Neste período
+        </div>
+
+      </div>
+
+
+      <div class="stat-card">
+
+        <div class="stat-glow"></div>
+
+        <div class="stat-label">
+          Disponíveis
+        </div>
+
+        <div
+          class="stat-value green"
+          id="availableStat"
+        >
+          —
+        </div>
+
+        <div class="stat-description">
+          Vídeos restantes
+        </div>
+
+      </div>
+
+
+      <div class="stat-card">
+
+        <div class="stat-glow"></div>
+
+        <div class="stat-label">
+          Renovação
+        </div>
+
+        <div
+          class="stat-value"
+          id="renewalStat"
+        >
+          —
+        </div>
+
+        <div class="stat-description">
+          Próximo ciclo
+        </div>
+
+      </div>
+
+    </section>
+
+
+    <!-- MAIN -->
+
+    <section class="main-grid">
+
+
+      <!-- USAGE -->
+
       <div class="card">
-        <h2>Uso mensal</h2>
 
-        <div class="usage" id="usage">
+        <div class="card-header">
+
+          <div>
+            <div class="card-title">
+              Seu consumo mensal
+            </div>
+
+            <div class="card-description">
+              Acompanhe quantos vídeos você já utilizou
+              neste período.
+            </div>
+          </div>
+
+        </div>
+
+
+        <div
+          class="usage-number"
+          id="usage"
+        >
           Carregando...
         </div>
 
-        <div class="available" id="available">
+
+        <div
+          class="available-big"
+          id="available"
+        >
           Carregando...
         </div>
+
 
         <div class="progress-container">
+
           <div
             class="progress-bar"
             id="progressBar"
           ></div>
+
         </div>
 
+
         <div class="progress-info">
+
           <span id="progressUsed">
             0% utilizado
           </span>
@@ -299,51 +1188,230 @@
           <span>
             Limite mensal
           </span>
+
         </div>
 
-        <div class="loading" id="usageMessage">
+
+        <div
+          class="usage-message"
+          id="usageMessage"
+        >
           Buscando seus dados...
         </div>
+
       </div>
+
+
+      <!-- PLAN + ACTION -->
 
       <div class="card">
-        <h2>Criar vídeos</h2>
 
-        <p class="subtitle">
-          Monte suas combinações de ganchos, corpos e CTAs.
-        </p>
+        <div class="card-header">
 
-        <div class="actions">
-          <a class="action" href="/">
-            Criar vídeos
-          </a>
+          <div>
+            <div class="card-title">
+              Sua assinatura
+            </div>
+
+            <div class="card-description">
+              Informações do seu plano atual.
+            </div>
+          </div>
+
         </div>
+
+
+        <div class="plan-box">
+
+          <div
+            class="plan-name"
+            id="planName"
+          >
+            GeraMix
+          </div>
+
+          <div
+            class="plan-price"
+            id="planPrice"
+          >
+            R$ 29,90 / mês
+          </div>
+
+          <span
+            class="status"
+            id="subscriptionStatus"
+          >
+            <span class="status-dot"></span>
+            Carregando...
+          </span>
+
+          <div
+            class="renewal"
+            id="renewal"
+          >
+            Próxima renovação: carregando...
+          </div>
+
+        </div>
+
+
+        <div style="height: 16px;"></div>
+
+
+        <a
+          class="action-main"
+          href="/"
+        >
+
+          <div class="action-icon">
+            🎬
+          </div>
+
+          <div class="action-text">
+
+            <div class="action-title">
+              Criar novos vídeos
+            </div>
+
+            <div class="action-description">
+              Ir para o multiplicador do GeraMix
+            </div>
+
+          </div>
+
+          <div class="action-arrow">
+            →
+          </div>
+
+        </a>
+
+
+        <a
+          class="secondary-action"
+          href="/"
+        >
+          Voltar ao GeraMix
+        </a>
+
       </div>
+
+    </section>
+
+
+    <!-- HOW IT WORKS -->
+
+    <section class="how-section">
 
       <div class="card">
-        <h2>Minha conta</h2>
 
-        <p class="subtitle">
-          Sua conta está conectada ao GeraMix.
-        </p>
+        <div class="card-header">
 
-        <div class="actions">
-          <a class="action secondary" href="/">
-            Voltar ao GeraMix
-          </a>
+          <div>
+
+            <div class="card-title">
+              Como funciona o GeraMix
+            </div>
+
+            <div class="card-description">
+              Crie várias combinações a partir dos seus conteúdos.
+            </div>
+
+          </div>
+
         </div>
+
+
+        <div class="steps">
+
+          <div class="step">
+
+            <div class="step-number">
+              01
+            </div>
+
+            <h3>
+              Escolha seus ganchos
+            </h3>
+
+            <p>
+              Adicione os ganchos que serão usados
+              para iniciar seus vídeos.
+            </p>
+
+          </div>
+
+
+          <div class="step">
+
+            <div class="step-number">
+              02
+            </div>
+
+            <h3>
+              Adicione corpos e CTAs
+            </h3>
+
+            <p>
+              Combine seus conteúdos para criar
+              diferentes versões dos vídeos.
+            </p>
+
+          </div>
+
+
+          <div class="step">
+
+            <div class="step-number">
+              03
+            </div>
+
+            <h3>
+              Gere seus vídeos
+            </h3>
+
+            <p>
+              O GeraMix monta as combinações
+              automaticamente para você.
+            </p>
+
+          </div>
+
+        </div>
+
       </div>
 
-    </div>
+    </section>
+
+
+    <!-- FOOTER -->
+
+    <footer>
+
+      <span>
+        GeraMix — Painel do cliente
+      </span>
+
+      <span>
+        Sua assinatura e consumo são atualizados automaticamente.
+      </span>
+
+    </footer>
 
   </div>
 
+
+  <!-- SUPABASE -->
+
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
+
   <script>
+
     let supabaseClient = null;
 
+
     function formatarData(data) {
+
       if (!data) {
         return "Não informada";
       }
@@ -354,204 +1422,450 @@
         return "Não informada";
       }
 
-      return dataObj.toLocaleDateString("pt-BR", {
-        day: "2-digit",
-        month: "2-digit",
-        year: "numeric"
-      });
+      return dataObj.toLocaleDateString(
+        "pt-BR",
+        {
+          day: "2-digit",
+          month: "2-digit",
+          year: "numeric"
+        }
+      );
     }
 
+
     async function carregarDashboard() {
+
       try {
-        const respostaConfig = await fetch("/api/config");
+
+        /* =========================
+           CONFIGURAÇÃO
+        ========================= */
+
+        const respostaConfig =
+          await fetch("/api/config");
+
 
         if (!respostaConfig.ok) {
+
           throw new Error(
             "Não foi possível carregar a configuração."
           );
+
         }
 
-        const config = await respostaConfig.json();
 
-        supabaseClient = window.supabase.createClient(
-          config.supabaseUrl,
-          config.supabaseAnonKey
-        );
+        const config =
+          await respostaConfig.json();
+
+
+        supabaseClient =
+          window.supabase.createClient(
+            config.supabaseUrl,
+            config.supabaseAnonKey
+          );
+
+
+        /* =========================
+           SESSÃO
+        ========================= */
 
         const {
           data: { session },
           error: sessionError
-        } = await supabaseClient.auth.getSession();
+        } =
+          await supabaseClient.auth.getSession();
+
 
         if (sessionError || !session) {
-          window.location.href = "/login.html";
+
+          window.location.href =
+            "/login.html";
+
           return;
+
         }
 
-        document.getElementById("userEmail").textContent =
-          session.user.email;
+
+        /* =========================
+           EMAIL
+        ========================= */
+
+        const email =
+          session.user.email || "";
+
+
+        document.getElementById(
+          "userEmail"
+        ).textContent = email;
+
+
+        document.getElementById(
+          "headerEmail"
+        ).textContent = email;
+
+
+        /* =========================
+           LOGOUT
+        ========================= */
 
         document
           .getElementById("logout")
-          .addEventListener("click", async () => {
+          .addEventListener(
+            "click",
+            async () => {
 
-            const { error } =
-              await supabaseClient.auth.signOut();
+              const { error } =
+                await supabaseClient.auth.signOut();
 
-            if (error) {
-              alert("Não foi possível sair da conta.");
-              return;
+
+              if (error) {
+
+                alert(
+                  "Não foi possível sair da conta."
+                );
+
+                return;
+
+              }
+
+
+              window.location.href =
+                "/login.html";
+
             }
+          );
 
-            window.location.href = "/login.html";
-          });
+
+        /* =========================
+           ASSINATURA
+        ========================= */
 
         const {
           data: subscriptions,
           error: subscriptionError
-        } = await supabaseClient
-          .from("subscriptions")
-          .select(`
-            status,
-            videos_used,
-            current_period_start,
-            current_period_end,
-            plan_id
-          `)
-          .eq("user_id", session.user.id)
-          .eq("status", "active")
-          .order("created_at", {
-            ascending: false
-          })
-          .limit(1);
+        } =
+          await supabaseClient
+            .from("subscriptions")
+            .select(`
+              status,
+              videos_used,
+              current_period_start,
+              current_period_end,
+              plan_id
+            `)
+            .eq(
+              "user_id",
+              session.user.id
+            )
+            .eq(
+              "status",
+              "active"
+            )
+            .order(
+              "created_at",
+              {
+                ascending: false
+              }
+            )
+            .limit(1);
+
 
         if (subscriptionError) {
+
           throw new Error(
             "Não foi possível carregar sua assinatura: " +
             subscriptionError.message
           );
+
         }
+
+
+        /* =========================
+           SEM ASSINATURA
+        ========================= */
 
         if (
           !subscriptions ||
           subscriptions.length === 0
         ) {
+
           document.getElementById(
             "subscriptionStatus"
-          ).textContent = "Sem assinatura ativa";
+          ).innerHTML =
+            '<span class="status-dot"></span>Sem assinatura ativa';
+
 
           document.getElementById(
             "renewal"
           ).textContent =
             "Nenhuma renovação programada.";
 
+
           document.getElementById(
             "usage"
-          ).textContent = "0 / 0";
+          ).innerHTML =
+            '0 <span>/ 0</span>';
+
 
           document.getElementById(
             "available"
           ).textContent =
             "Nenhum vídeo disponível";
 
+
           document.getElementById(
             "usageMessage"
           ).textContent =
             "Não encontramos uma assinatura ativa.";
 
+
+          document.getElementById(
+            "planNameStat"
+          ).textContent =
+            "Sem plano";
+
+
+          document.getElementById(
+            "planPriceStat"
+          ).textContent =
+            "Nenhuma assinatura ativa";
+
+
+          document.getElementById(
+            "usedStat"
+          ).textContent =
+            "0";
+
+
+          document.getElementById(
+            "availableStat"
+          ).textContent =
+            "0";
+
+
+          document.getElementById(
+            "renewalStat"
+          ).textContent =
+            "—";
+
+
           return;
+
         }
 
-        const subscription = subscriptions[0];
+
+        const subscription =
+          subscriptions[0];
+
+
+        /* =========================
+           PLANO
+        ========================= */
 
         const {
           data: plans,
           error: planError
-        } = await supabaseClient
-          .from("plans")
-          .select(
-            "name, price, monthly_limit"
-          )
-          .eq("id", subscription.plan_id)
-          .eq("active", true)
-          .limit(1);
+        } =
+          await supabaseClient
+            .from("plans")
+            .select(
+              "name, price, monthly_limit"
+            )
+            .eq(
+              "id",
+              subscription.plan_id
+            )
+            .eq(
+              "active",
+              true
+            )
+            .limit(1);
+
 
         if (planError) {
+
           throw new Error(
             "Não foi possível carregar o plano: " +
             planError.message
           );
+
         }
 
-        if (!plans || plans.length === 0) {
-          throw new Error("Plano não encontrado.");
+
+        if (
+          !plans ||
+          plans.length === 0
+        ) {
+
+          throw new Error(
+            "Plano não encontrado."
+          );
+
         }
 
-        const plan = plans[0];
+
+        const plan =
+          plans[0];
+
+
+        /* =========================
+           CÁLCULOS
+        ========================= */
 
         const used =
-          Number(subscription.videos_used || 0);
+          Number(
+            subscription.videos_used || 0
+          );
+
 
         const limit =
-          Number(plan.monthly_limit || 0);
+          Number(
+            plan.monthly_limit || 0
+          );
+
 
         const available =
-          Math.max(0, limit - used);
+          Math.max(
+            0,
+            limit - used
+          );
+
 
         let percentage = 0;
 
+
         if (limit > 0) {
-          percentage = (used / limit) * 100;
+
+          percentage =
+            (used / limit) * 100;
+
         }
 
-        percentage = Math.min(
-          100,
-          Math.max(0, percentage)
-        );
+
+        percentage =
+          Math.min(
+            100,
+            Math.max(
+              0,
+              percentage
+            )
+          );
+
+
+        const price =
+          Number(plan.price || 0)
+            .toFixed(2)
+            .replace(".", ",");
+
+
+        const renewalDate =
+          formatarData(
+            subscription.current_period_end
+          );
+
+
+        /* =========================
+           PLANO
+        ========================= */
 
         document.getElementById(
           "planName"
-        ).textContent = plan.name;
+        ).textContent =
+          plan.name;
+
 
         document.getElementById(
           "planPrice"
         ).textContent =
           "R$ " +
-          Number(plan.price)
-            .toFixed(2)
-            .replace(".", ",") +
+          price +
           " / mês";
+
 
         document.getElementById(
           "subscriptionStatus"
-        ).textContent =
-          "Assinatura ativa";
+        ).innerHTML =
+          '<span class="status-dot"></span>Assinatura ativa';
+
 
         document.getElementById(
           "renewal"
         ).textContent =
           "Próxima renovação: " +
-          formatarData(
-            subscription.current_period_end
+          renewalDate;
+
+
+        /* =========================
+           STATS
+        ========================= */
+
+        document.getElementById(
+          "planNameStat"
+        ).textContent =
+          plan.name;
+
+
+        document.getElementById(
+          "planPriceStat"
+        ).textContent =
+          "R$ " +
+          price +
+          " / mês";
+
+
+        document.getElementById(
+          "usedStat"
+        ).textContent =
+          used.toLocaleString(
+            "pt-BR"
           );
+
+
+        document.getElementById(
+          "availableStat"
+        ).textContent =
+          available.toLocaleString(
+            "pt-BR"
+          );
+
+
+        document.getElementById(
+          "renewalStat"
+        ).textContent =
+          renewalDate;
+
+
+        /* =========================
+           USO
+        ========================= */
 
         document.getElementById(
           "usage"
-        ).textContent =
-          used.toLocaleString("pt-BR") +
-          " / " +
-          limit.toLocaleString("pt-BR");
+        ).innerHTML =
+          used.toLocaleString(
+            "pt-BR"
+          ) +
+          ' <span>/ ' +
+          limit.toLocaleString(
+            "pt-BR"
+          ) +
+          '</span>';
+
 
         document.getElementById(
           "available"
         ).textContent =
-          available.toLocaleString("pt-BR") +
+          available.toLocaleString(
+            "pt-BR"
+          ) +
           " vídeos disponíveis";
+
 
         document.getElementById(
           "progressBar"
         ).style.width =
           percentage + "%";
+
 
         document.getElementById(
           "progressUsed"
@@ -565,38 +1879,52 @@
           ) +
           "% utilizado";
 
+
         document.getElementById(
           "usageMessage"
         ).textContent =
           "Seu consumo é atualizado automaticamente.";
 
-      } catch (erro) {
+      }
+
+      catch (erro) {
+
         console.error(
           "Erro no Dashboard:",
           erro
         );
 
+
         document.getElementById(
           "usage"
-        ).textContent = "Erro";
+        ).textContent =
+          "Erro";
+
 
         document.getElementById(
           "available"
         ).textContent =
           "Não foi possível carregar os dados.";
 
+
         document.getElementById(
           "usageMessage"
-        ).className = "error";
+        ).className =
+          "usage-message error";
+
 
         document.getElementById(
           "usageMessage"
         ).textContent =
           erro.message;
+
       }
+
     }
 
+
     carregarDashboard();
+
   </script>
 
 </body>
