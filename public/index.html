@@ -316,7 +316,7 @@ button:disabled{
 
 /* =========================================================
    CONTADOR DA ASSINATURA
-   ========================================================= */
+========================================================= */
 
 .quota-card{
   margin-top:18px;
@@ -427,7 +427,7 @@ button:disabled{
 
 <!-- =====================================================
      CONTADOR DA ASSINATURA
-     ===================================================== -->
+===================================================== -->
 
 <div class="quota-card">
 
@@ -591,6 +591,19 @@ button:disabled{
 let supabaseClient = null;
 let authReady = false;
 
+/* =========================================================
+   ESTADO DA COTA
+========================================================= */
+
+let monthlyVideosUsed = 0;
+let monthlyVideoLimit = 0;
+let quotaLoaded = false;
+
+
+/* =========================================================
+   AUTENTICAÇÃO
+========================================================= */
+
 async function initializeAuth(){
 
   try{
@@ -701,6 +714,7 @@ async function initializeAuth(){
   }
 }
 
+
 async function refreshAuthSession(){
 
   if(!supabaseClient){
@@ -745,6 +759,7 @@ async function refreshAuthSession(){
     return false;
   }
 }
+
 
 async function getAuthToken(
   forceRefresh = false
@@ -894,6 +909,7 @@ async function getAuthToken(
   return session.access_token;
 }
 
+
 async function authHeaders(
   forceRefresh = false
 ){
@@ -912,7 +928,7 @@ async function authHeaders(
 
 /* =========================================================
    DADOS
-   ========================================================= */
+========================================================= */
 
 const D = {
   h:[],
@@ -926,7 +942,7 @@ const $ = id =>
 
 /* =========================================================
    CONTADOR DA COTA MENSAL
-   ========================================================= */
+========================================================= */
 
 async function loadMonthlyQuota(){
 
@@ -965,6 +981,8 @@ async function loadMonthlyQuota(){
         subscriptionResult.error
       );
 
+      quotaLoaded = false;
+
       $("quotaNumber")
         .textContent =
         "Indisponível";
@@ -980,6 +998,8 @@ async function loadMonthlyQuota(){
       subscriptionResult.data;
 
     if(!subscription){
+
+      quotaLoaded = false;
 
       $("quotaNumber")
         .textContent =
@@ -1022,6 +1042,8 @@ async function loadMonthlyQuota(){
         planResult.error
       );
 
+      quotaLoaded = false;
+
       $("quotaNumber")
         .textContent =
         "Indisponível";
@@ -1043,33 +1065,19 @@ async function loadMonthlyQuota(){
         planResult.data.monthly_limit || 0
       );
 
-    const remaining =
-      Math.max(
-        0,
-        limit - used
-      );
+    monthlyVideosUsed =
+      used;
 
-    const percentage =
-      limit > 0
-        ? Math.min(
-            100,
-            Math.round(
-              used / limit * 100
-            )
-          )
-        : 0;
+    monthlyVideoLimit =
+      limit;
 
-    $("quotaNumber")
-      .textContent =
-      `${used.toLocaleString("pt-BR")} / ${limit.toLocaleString("pt-BR")} vídeos`;
+    quotaLoaded =
+      limit > 0;
 
-    $("quotaRemaining")
-      .textContent =
-      `${remaining.toLocaleString("pt-BR")} vídeos disponíveis neste mês`;
-
-    $("quotaProgressBar")
-      .style.width =
-      percentage + "%";
+    updateQuotaDisplay(
+      used,
+      limit
+    );
 
   }catch(error){
 
@@ -1077,6 +1085,8 @@ async function loadMonthlyQuota(){
       "Erro ao carregar cota mensal:",
       error
     );
+
+    quotaLoaded = false;
 
     $("quotaNumber")
       .textContent =
@@ -1092,7 +1102,7 @@ async function loadMonthlyQuota(){
 
 /* =========================================================
    ATUALIZA CONTADOR COM RESPOSTA DO SERVIDOR
-   ========================================================= */
+========================================================= */
 
 function updateQuotaDisplay(
   videosUsed,
@@ -1111,8 +1121,26 @@ function updateQuotaDisplay(
 
   if(!limit){
 
+    monthlyVideosUsed =
+      used;
+
+    monthlyVideoLimit =
+      limit;
+
+    quotaLoaded =
+      false;
+
     return;
   }
+
+  monthlyVideosUsed =
+    used;
+
+  monthlyVideoLimit =
+    limit;
+
+  quotaLoaded =
+    true;
 
   const remaining =
     Math.max(
@@ -1139,12 +1167,110 @@ function updateQuotaDisplay(
   $("quotaProgressBar")
     .style.width =
     percentage + "%";
+
+  updateGenerateButtonState();
+}
+
+
+/* =========================================================
+   VERIFICA SE O SALDO PERMITE A QUANTIDADE
+========================================================= */
+
+function checkQuotaForGeneration(
+  total
+){
+
+  if(!quotaLoaded){
+
+    return {
+      allowed:false,
+      message:
+        "Aguarde enquanto verificamos sua cota mensal."
+    };
+  }
+
+  const remaining =
+    Math.max(
+      0,
+      monthlyVideoLimit -
+      monthlyVideosUsed
+    );
+
+  if(remaining <= 0){
+
+    return {
+      allowed:false,
+      message:
+        "Sua cota mensal de 1.000 vídeos foi atingida. Aguarde a renovação da assinatura para gerar novos vídeos."
+    };
+  }
+
+  if(total > remaining){
+
+    return {
+      allowed:false,
+      message:
+        `Você está tentando gerar ${total.toLocaleString("pt-BR")} vídeos, mas possui apenas ${remaining.toLocaleString("pt-BR")} vídeos disponíveis neste mês.`
+    };
+  }
+
+  return {
+    allowed:true,
+    message:""
+  };
+}
+
+
+/* =========================================================
+   ATUALIZA ESTADO DO BOTÃO
+========================================================= */
+
+function updateGenerateButtonState(){
+
+  const button =
+    $("go");
+
+  if(!button){
+    return;
+  }
+
+  if(!quotaLoaded){
+
+    button.disabled = false;
+
+    return;
+  }
+
+  const remaining =
+    Math.max(
+      0,
+      monthlyVideoLimit -
+      monthlyVideosUsed
+    );
+
+  if(remaining <= 0){
+
+    button.disabled = true;
+
+    button.textContent =
+      "Cota mensal atingida";
+
+    return;
+  }
+
+  if(button.disabled){
+
+    return;
+  }
+
+  button.textContent =
+    "Gerar vídeos MP4";
 }
 
 
 /* =========================================================
    LISTA DE ARQUIVOS
-   ========================================================= */
+========================================================= */
 
 function setup(
   id,
@@ -1193,7 +1319,7 @@ function setup(
 
 /* =========================================================
    ESCAPA HTML
-   ========================================================= */
+========================================================= */
 
 function escapeHtml(
   value
@@ -1225,7 +1351,7 @@ function escapeHtml(
 
 /* =========================================================
    CONTADORES
-   ========================================================= */
+========================================================= */
 
 function update(){
 
@@ -1251,7 +1377,7 @@ function update(){
 
 /* =========================================================
    ORIGINALIDADE
-   ========================================================= */
+========================================================= */
 
 function originalityClass(
   value
@@ -1271,7 +1397,7 @@ function originalityClass(
 
 /* =========================================================
    RESUMO
-   ========================================================= */
+========================================================= */
 
 function renderOriginalitySummary(
   files
@@ -1360,7 +1486,7 @@ function renderOriginalitySummary(
 
 /* =========================================================
    URL AUTENTICADA
-   ========================================================= */
+========================================================= */
 
 async function createAuthenticatedVideoUrl(
   jobId,
@@ -1389,7 +1515,7 @@ async function createAuthenticatedVideoUrl(
 
 /* =========================================================
    SELETORES COM LIMITE CRAVADO
-   ========================================================= */
+========================================================= */
 
 setup(
   "hooks",
@@ -1415,7 +1541,7 @@ setup(
 
 /* =========================================================
    GERAR
-   ========================================================= */
+========================================================= */
 
 $("go").onclick =
   async () => {
@@ -1462,6 +1588,26 @@ $("go").onclick =
       return;
     }
 
+    /* =====================================================
+       VERIFICA COTA ANTES DE ENVIAR OS ARQUIVOS
+    ===================================================== */
+
+    const quotaCheck =
+      checkQuotaForGeneration(
+        total
+      );
+
+    if(
+      !quotaCheck.allowed
+    ){
+
+      alert(
+        quotaCheck.message
+      );
+
+      return;
+    }
+
     const fd =
       new FormData();
 
@@ -1491,6 +1637,10 @@ $("go").onclick =
 
     $("go").disabled =
       true;
+
+    $("go")
+      .textContent =
+      "Gerando…";
 
     $("download")
       .style.display =
@@ -1581,6 +1731,22 @@ $("go").onclick =
         );
       }
 
+      /* ===================================================
+         SE O SERVIDOR RECUSAR POR COTA,
+         ATUALIZA O CONTADOR REAL
+      =================================================== */
+
+      if(
+        j.videosUsed !== undefined &&
+        j.monthlyLimit !== undefined
+      ){
+
+        updateQuotaDisplay(
+          j.videosUsed,
+          j.monthlyLimit
+        );
+      }
+
       if(
         !r.ok
       ){
@@ -1592,6 +1758,7 @@ $("go").onclick =
       }
 
       /* Atualiza a cota imediatamente após a reserva */
+
       if(
         j.videosUsed !== undefined &&
         j.monthlyLimit !== undefined
@@ -1823,6 +1990,8 @@ $("go").onclick =
                 .disabled =
                 false;
 
+              updateGenerateButtonState();
+
               return;
             }
 
@@ -1861,6 +2030,8 @@ $("go").onclick =
             $("go")
               .disabled =
               false;
+
+            updateGenerateButtonState();
           }
         };
 
@@ -1885,13 +2056,15 @@ $("go").onclick =
       $("go")
         .disabled =
         false;
+
+      updateGenerateButtonState();
     }
   };
 
 
 /* =========================================================
    INICIA
-   ========================================================= */
+========================================================= */
 
 (async()=>{
 
@@ -1907,7 +2080,10 @@ $("go").onclick =
       "Pronto.";
 
     /* Carrega o uso mensal */
+
     await loadMonthlyQuota();
+
+    updateGenerateButtonState();
 
   }
 
