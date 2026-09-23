@@ -180,6 +180,13 @@ async function requireAuth(req, res, next) {
 
     req.user = user;
 
+    /*
+      Guarda o token real da sessão para que,
+      posteriormente, o servidor possa chamar
+      a função segura de cota no Supabase.
+    */
+    req.accessToken = token;
+
     next();
 
   } catch (error) {
@@ -193,6 +200,115 @@ async function requireAuth(req, res, next) {
         "Não foi possível validar sua sessão."
     });
   }
+}
+
+/* =========================================================
+   RESERVA DE COTA
+========================================================= */
+
+async function reserveVideoQuota(
+  userId,
+  accessToken,
+  amount
+) {
+
+  const response =
+    await fetch(
+      SUPABASE_URL +
+        "/rest/v1/rpc/reserve_video_quota",
+      {
+        method: "POST",
+
+        headers: {
+          "Content-Type":
+            "application/json",
+
+          Authorization:
+            "Bearer " +
+            accessToken,
+
+          apikey:
+            SUPABASE_ANON_KEY
+        },
+
+        body:
+          JSON.stringify({
+            p_user_id:
+              userId,
+
+            p_amount:
+              amount
+          })
+      }
+    );
+
+  if (!response.ok) {
+
+    let details = "";
+
+    try {
+      const data =
+        await response.json();
+
+      details =
+        data?.message ||
+        data?.msg ||
+        data?.error_description ||
+        data?.error ||
+        "";
+    } catch {
+      details = "";
+    }
+
+    console.error(
+      "GeraMix: erro ao reservar cota.",
+      response.status,
+      details
+    );
+
+    throw new Error(
+      "Não foi possível verificar sua cota mensal."
+    );
+  }
+
+  const data =
+    await response.json();
+
+  /*
+    A função RPC retorna uma tabela.
+    Portanto, normalmente recebemos um array
+    com um único registro.
+  */
+
+  const result =
+    Array.isArray(data)
+      ? data[0]
+      : data;
+
+  if (!result) {
+    throw new Error(
+      "O servidor não recebeu a resposta da cota."
+    );
+  }
+
+  return {
+    allowed:
+      Boolean(result.allowed),
+
+    videosUsed:
+      Number(
+        result.videos_used || 0
+      ),
+
+    monthlyLimit:
+      Number(
+        result.monthly_limit || 0
+      ),
+
+    message:
+      result.message ||
+      ""
+  };
 }
 
 /* =========================================================
@@ -692,9 +808,97 @@ app.post(
       MAX_COMBINATIONS
     ) {
 
+      await Promise.all(
+        [
+          ...hooks,
+          ...bodies,
+          ...ctas
+        ].map(
+          file =>
+            fsp.rm(
+              file.path,
+              {
+                force: true
+              }
+            )
+        )
+      );
+
       return res.status(400).json({
         error:
           `Limite de ${MAX_COMBINATIONS} combinações por lote.`
+      });
+    }
+
+    /* =====================================================
+       RESERVA A COTA MENSAL
+    ===================================================== */
+
+    let quota;
+
+    try {
+
+      quota =
+        await reserveVideoQuota(
+          req.user.id,
+          req.accessToken,
+          total
+        );
+
+    } catch (error) {
+
+      await Promise.all(
+        [
+          ...hooks,
+          ...bodies,
+          ...ctas
+        ].map(
+          file =>
+            fsp.rm(
+              file.path,
+              {
+                force: true
+              }
+            )
+        )
+      );
+
+      return res.status(503).json({
+        error:
+          error?.message ||
+          "Não foi possível verificar sua cota mensal."
+      });
+    }
+
+    if (!quota.allowed) {
+
+      await Promise.all(
+        [
+          ...hooks,
+          ...bodies,
+          ...ctas
+        ].map(
+          file =>
+            fsp.rm(
+              file.path,
+              {
+                force: true
+              }
+            )
+        )
+      );
+
+      return res.status(403).json({
+
+        error:
+          quota.message ||
+          "Limite mensal de vídeos atingido.",
+
+        videosUsed:
+          quota.videosUsed,
+
+        monthlyLimit:
+          quota.monthlyLimit
       });
     }
 
@@ -737,7 +941,13 @@ app.post(
         null,
 
       mode:
-        "montagem-sob-demanda"
+        "montagem-sob-demanda",
+
+      videosUsed:
+        quota.videosUsed,
+
+      monthlyLimit:
+        quota.monthlyLimit
     };
 
     jobs.set(
@@ -747,7 +957,14 @@ app.post(
 
     res.json({
       id,
-      total
+
+      total,
+
+      videosUsed:
+        quota.videosUsed,
+
+      monthlyLimit:
+        quota.monthlyLimit
     });
 
     /* =====================================================
@@ -896,9 +1113,6 @@ app.post(
 
         /* ================================================
            4. PREPARA AS COMBINAÇÕES
-
-           NÃO cria os 150 MP4 aqui.
-           Apenas registra as combinações.
         ================================================ */
 
         job.current =
@@ -1068,8 +1282,6 @@ app.post(
 
         /* ================================================
            6. FINALIZADO
-
-           O ZIP é montado quando o usuário clicar.
         ================================================ */
 
         job.current =
