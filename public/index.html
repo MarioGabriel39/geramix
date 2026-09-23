@@ -361,7 +361,7 @@ button:disabled{
   <h2>1. Ganchos</h2>
 
   <div class="muted">
-    Até 10 vídeos de abertura
+    Até 5 vídeos de abertura
   </div>
 
   <label class="pick" for="hooks">
@@ -384,7 +384,7 @@ button:disabled{
   <h2>2. Corpos</h2>
 
   <div class="muted">
-    Até 10 vídeos principais
+    Até 5 vídeos principais
   </div>
 
   <label class="pick" for="bodies">
@@ -407,7 +407,7 @@ button:disabled{
   <h2>3. CTAs</h2>
 
   <div class="muted">
-    Até 10 vídeos finais
+    Até 6 vídeos finais
   </div>
 
   <label class="pick" for="ctas">
@@ -545,14 +545,6 @@ async function initializeAuth(){
     }
 
 
-    /*
-       IMPORTANTE:
-
-       Mantemos a sessão no navegador,
-       permitimos renovação automática
-       e usamos a mesma sessão em toda a página.
-    */
-
     supabaseClient =
       window.supabase.createClient(
         config.supabaseUrl,
@@ -588,11 +580,6 @@ async function initializeAuth(){
     let session =
       result.data?.session;
 
-
-    /*
-       Se não encontrou sessão,
-       tenta renovar uma vez.
-    */
 
     if(
       !session
@@ -766,11 +753,6 @@ async function getAuthToken(
   }
 
 
-  /*
-     Se foi solicitado refresh,
-     tenta renovar.
-  */
-
   if(
     forceRefresh
   ){
@@ -815,11 +797,6 @@ async function getAuthToken(
   let session =
     result.data?.session;
 
-
-  /*
-     Se não houver sessão,
-     tenta renovar.
-  */
 
   if(
     !session ||
@@ -878,11 +855,6 @@ async function getAuthToken(
 
   }
 
-
-  /*
-     Se estiver muito perto de expirar,
-     renova antes de enviar ao servidor.
-  */
 
   if(
     session.expires_at
@@ -1351,12 +1323,6 @@ $("go").onclick =
 
     try{
 
-      /*
-         Usa o token atual.
-
-         NÃO força refresh toda vez.
-      */
-
       let headers =
         await authHeaders(
           false
@@ -1378,13 +1344,6 @@ $("go").onclick =
           }
         );
 
-
-      /*
-         401 = servidor recusou o token.
-
-         Neste caso renovamos a sessão
-         e tentamos novamente uma única vez.
-      */
 
       if(
         r.status === 401
@@ -1458,10 +1417,6 @@ $("go").onclick =
       }
 
 
-      /*
-         PROCESSAMENTO
-      */
-
       const poll =
         async () => {
 
@@ -1482,10 +1437,6 @@ $("go").onclick =
                 }
               );
 
-
-            /*
-               Se o token expirou durante o processamento.
-            */
 
             if(
               response.status === 401
@@ -1678,10 +1629,6 @@ $("go").onclick =
             }
 
 
-            /*
-               TERMINOU
-            */
-
             if(
               x.status ===
               "done"
@@ -1724,10 +1671,6 @@ $("go").onclick =
 
             }
 
-
-            /*
-               ERRO NO PROCESSAMENTO
-            */
 
             if(
               x.status ===
