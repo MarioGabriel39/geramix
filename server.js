@@ -6,7 +6,6 @@ import path from "path";
 import os from "os";
 import crypto from "crypto";
 import { spawn } from "child_process";
-import { Readable } from "stream";
 import archiver from "archiver";
 import ffmpegPath from "ffmpeg-static";
 
@@ -181,6 +180,11 @@ async function requireAuth(req, res, next) {
 
     req.user = user;
 
+    /*
+      Guarda o token real da sessão para que,
+      posteriormente, o servidor possa chamar
+      as funções seguras de cota e Storage no Supabase.
+    */
     req.accessToken = token;
 
     next();
@@ -407,6 +411,9 @@ const FFMPEG_CONCURRENCY = 1;
 
 const MAX_COMBINATIONS = 150;
 
+/*
+  Bucket privado já criado no Supabase.
+*/
 const DOWNLOADS_BUCKET =
   "geramix-downloads";
 
@@ -1097,333 +1104,6 @@ async function cleanupStoredDownloads(
 }
 
 /* =========================================================
-   NOVA CENTRAL DE DOWNLOADS
-   REMOVE ARQUIVOS EXPIRADOS DO USUÁRIO
-========================================================= */
-
-async function cleanupExpiredDownloads(
-  userId,
-  accessToken
-) {
-
-  try {
-
-    const now =
-      new Date().toISOString();
-
-    const url =
-      `${SUPABASE_URL}/rest/v1/downloads` +
-      `?user_id=eq.${encodeURIComponent(userId)}` +
-      `&expires_at=lt.${encodeURIComponent(now)}` +
-      `&select=id,storage_path`;
-
-    const response =
-      await fetch(
-        url,
-        {
-          method: "GET",
-
-          headers: {
-            Authorization:
-              `Bearer ${accessToken}`,
-
-            apikey:
-              SUPABASE_ANON_KEY
-          }
-        }
-      );
-
-    if (!response.ok) {
-
-      console.error(
-        "GeraMix: não foi possível consultar vídeos expirados.",
-        response.status
-      );
-
-      return;
-    }
-
-    const expired =
-      await response.json();
-
-    if (
-      !Array.isArray(expired) ||
-      !expired.length
-    ) {
-      return;
-    }
-
-    for (
-      const item
-      of expired
-    ) {
-
-      if (
-        item?.storage_path
-      ) {
-
-        await deleteVideoFromStorage(
-          item.storage_path,
-          accessToken
-        );
-      }
-    }
-
-    const ids =
-      expired
-        .map(
-          item =>
-            Number(item.id)
-        )
-        .filter(
-          id =>
-            Number.isFinite(id)
-        );
-
-    if (!ids.length) {
-      return;
-    }
-
-    const idFilter =
-      ids.join(",");
-
-    const deleteUrl =
-      `${SUPABASE_URL}/rest/v1/downloads` +
-      `?user_id=eq.${encodeURIComponent(userId)}` +
-      `&id=in.(${idFilter})`;
-
-    const deleteResponse =
-      await fetch(
-        deleteUrl,
-        {
-          method: "DELETE",
-
-          headers: {
-            Authorization:
-              `Bearer ${accessToken}`,
-
-            apikey:
-              SUPABASE_ANON_KEY,
-
-            Prefer:
-              "return=minimal"
-          }
-        }
-      );
-
-    if (!deleteResponse.ok) {
-
-      let details = "";
-
-      try {
-        details =
-          await deleteResponse.text();
-      } catch {
-        details = "";
-      }
-
-      console.error(
-        "GeraMix: erro removendo registros expirados.",
-        deleteResponse.status,
-        details
-      );
-
-      return;
-    }
-
-    console.log(
-      `GeraMix: ${ids.length} download(s) expirado(s) removido(s).`
-    );
-
-  } catch (error) {
-
-    console.error(
-      "GeraMix: erro na limpeza de downloads expirados:",
-      error
-    );
-  }
-}
-
-/* =========================================================
-   BUSCA DOWNLOADS DO USUÁRIO
-========================================================= */
-
-async function getUserDownloads(
-  userId,
-  accessToken
-) {
-
-  const url =
-    `${SUPABASE_URL}/rest/v1/downloads` +
-    `?user_id=eq.${encodeURIComponent(userId)}` +
-    `&order=created_at.desc` +
-    `&select=id,user_id,job_id,file_name,storage_path,originality,created_at,expires_at`;
-
-  const response =
-    await fetch(
-      url,
-      {
-        method: "GET",
-
-        headers: {
-          Authorization:
-            `Bearer ${accessToken}`,
-
-          apikey:
-            SUPABASE_ANON_KEY
-        }
-      }
-    );
-
-  if (!response.ok) {
-
-    let details = "";
-
-    try {
-      details =
-        await response.text();
-    } catch {
-      details = "";
-    }
-
-    throw new Error(
-      "Não foi possível carregar a Central de Downloads." +
-      (details
-        ? ` ${details}`
-        : "")
-    );
-  }
-
-  const data =
-    await response.json();
-
-  return Array.isArray(data)
-    ? data
-    : [];
-}
-
-/* =========================================================
-   EXCLUI UM DOWNLOAD ESPECÍFICO
-========================================================= */
-
-async function deleteDownloadById(
-  userId,
-  downloadId,
-  accessToken
-) {
-
-  const selectUrl =
-    `${SUPABASE_URL}/rest/v1/downloads` +
-    `?id=eq.${encodeURIComponent(downloadId)}` +
-    `&user_id=eq.${encodeURIComponent(userId)}` +
-    `&select=id,storage_path`;
-
-  const selectResponse =
-    await fetch(
-      selectUrl,
-      {
-        method: "GET",
-
-        headers: {
-          Authorization:
-            `Bearer ${accessToken}`,
-
-          apikey:
-            SUPABASE_ANON_KEY
-        }
-      }
-    );
-
-  if (!selectResponse.ok) {
-
-    throw new Error(
-      "Não foi possível localizar o vídeo."
-    );
-  }
-
-  const rows =
-    await selectResponse.json();
-
-  if (
-    !Array.isArray(rows) ||
-    !rows.length
-  ) {
-
-    return {
-      found: false
-    };
-  }
-
-  const item =
-    rows[0];
-
-  if (
-    item.storage_path
-  ) {
-
-    const deleted =
-      await deleteVideoFromStorage(
-        item.storage_path,
-        accessToken
-      );
-
-    if (!deleted) {
-
-      throw new Error(
-        "Não foi possível excluir o vídeo do Storage."
-      );
-    }
-  }
-
-  const deleteUrl =
-    `${SUPABASE_URL}/rest/v1/downloads` +
-    `?id=eq.${encodeURIComponent(downloadId)}` +
-    `&user_id=eq.${encodeURIComponent(userId)}`;
-
-  const deleteResponse =
-    await fetch(
-      deleteUrl,
-      {
-        method: "DELETE",
-
-        headers: {
-          Authorization:
-            `Bearer ${accessToken}`,
-
-          apikey:
-            SUPABASE_ANON_KEY,
-
-          Prefer:
-            "return=minimal"
-        }
-      }
-    );
-
-  if (!deleteResponse.ok) {
-
-    let details = "";
-
-    try {
-      details =
-        await deleteResponse.text();
-    } catch {
-      details = "";
-    }
-
-    throw new Error(
-      "O vídeo foi removido do Storage, mas não foi possível remover o registro." +
-      (details
-        ? ` ${details}`
-        : "")
-    );
-  }
-
-  return {
-    found: true
-  };
-}
-
-/* =========================================================
    CONFIGURAÇÃO DO UPLOAD
 ========================================================= */
 
@@ -1726,6 +1406,10 @@ app.post(
 
       files: [],
 
+      /*
+        Lista dos vídeos que já foram enviados
+        para a Central de Downloads.
+      */
       downloads: [],
 
       error:
@@ -2068,6 +1752,11 @@ app.post(
             a.index - b.index
         );
 
+        /*
+          Até aqui só preparamos as combinações.
+          Agora começa a geração real dos vídeos.
+        */
+
         job.done = 0;
 
         /* ================================================
@@ -2089,6 +1778,9 @@ app.post(
           job.current =
             `Gerando vídeo ${position}/${total}…`;
 
+          /*
+            Gera somente UM MP4 final temporário.
+          */
           const tempVideo =
             await createVideoForJob(
               job,
@@ -2107,12 +1799,19 @@ app.post(
             job.current =
               `Enviando vídeo ${position}/${total}…`;
 
+            /*
+              Envia o MP4 para o bucket privado.
+            */
             await uploadVideoToStorage(
               tempVideo,
               storagePath,
               req.accessToken
             );
 
+            /*
+              Depois que o upload deu certo,
+              registra o vídeo na tabela downloads.
+            */
             await registerDownload(
               {
                 userId:
@@ -2132,6 +1831,10 @@ app.post(
               req.accessToken
             );
 
+            /*
+              Guarda em memória somente os dados necessários
+              para eventual limpeza caso o lote falhe.
+            */
             job.downloads.push({
               fileName:
                 file.name,
@@ -2142,6 +1845,9 @@ app.post(
                 file.originality
             });
 
+            /*
+              O vídeo foi realmente armazenado.
+            */
             job.done =
               position;
 
@@ -2150,6 +1856,10 @@ app.post(
 
           } catch (error) {
 
+            /*
+              Se o upload deu certo mas o registro
+              no banco falhou, tentamos remover o objeto.
+            */
             await deleteVideoFromStorage(
               storagePath,
               req.accessToken
@@ -2159,6 +1869,10 @@ app.post(
 
           } finally {
 
+            /*
+              Nunca mantemos os vídeos finais
+              dentro do /tmp.
+            */
             await fsp.rm(
               tempVideo,
               {
@@ -2193,11 +1907,19 @@ app.post(
           e
         );
 
+        /*
+          Se alguma etapa falhou, removemos os vídeos
+          que já chegaram ao Storage e seus registros.
+        */
         await cleanupStoredDownloads(
           job,
           req.accessToken
         );
 
+        /*
+          A cota foi reservada antes do processamento.
+          Como o lote não terminou, devolvemos toda a cota.
+        */
         await releaseVideoQuota(
           req.user.id,
           req.accessToken,
@@ -2272,395 +1994,6 @@ app.get(
     }
 
     res.json(job);
-  }
-);
-
-/* =========================================================
-   CENTRAL DE DOWNLOADS
-   LISTA OS VÍDEOS DO USUÁRIO
-========================================================= */
-
-app.get(
-  "/api/downloads",
-
-  requireAuth,
-
-  async (req, res) => {
-
-    try {
-
-      /*
-        Antes de listar, removemos do Storage
-        e do banco os vídeos que já passaram
-        dos 7 dias.
-      */
-      await cleanupExpiredDownloads(
-        req.user.id,
-        req.accessToken
-      );
-
-      const downloads =
-        await getUserDownloads(
-          req.user.id,
-          req.accessToken
-        );
-
-      res.json({
-        downloads
-      });
-
-    } catch (error) {
-
-      console.error(
-        "GeraMix: erro carregando Central de Downloads:",
-        error
-      );
-
-      res.status(500).json({
-        error:
-          error?.message ||
-          "Não foi possível carregar seus downloads."
-      });
-    }
-
-  }
-);
-
-/* =========================================================
-   CENTRAL DE DOWNLOADS
-   VISUALIZA / BAIXA UM VÍDEO DO STORAGE
-========================================================= */
-
-app.get(
-  "/api/downloads/:id/video",
-
-  requireAuth,
-
-  async (req, res) => {
-
-    try {
-
-      const downloadId =
-        String(
-          req.params.id || ""
-        ).trim();
-
-      if (!/^\d+$/.test(downloadId)) {
-
-        return res.sendStatus(400);
-      }
-
-      const url =
-        `${SUPABASE_URL}/rest/v1/downloads` +
-        `?id=eq.${encodeURIComponent(downloadId)}` +
-        `&user_id=eq.${encodeURIComponent(req.user.id)}` +
-        `&select=id,file_name,storage_path,expires_at`;
-
-      const response =
-        await fetch(
-          url,
-          {
-            method: "GET",
-
-            headers: {
-              Authorization:
-                `Bearer ${req.accessToken}`,
-
-              apikey:
-                SUPABASE_ANON_KEY
-            }
-          }
-        );
-
-      if (!response.ok) {
-
-        return res.sendStatus(404);
-      }
-
-      const rows =
-        await response.json();
-
-      if (
-        !Array.isArray(rows) ||
-        !rows.length
-      ) {
-
-        return res.sendStatus(404);
-      }
-
-      const download =
-        rows[0];
-
-      if (
-        !download.storage_path
-      ) {
-
-        return res.sendStatus(404);
-      }
-
-      /*
-        Se já expirou, remove e não entrega.
-      */
-      if (
-        download.expires_at &&
-        new Date(download.expires_at).getTime() <=
-          Date.now()
-      ) {
-
-        await deleteDownloadById(
-          req.user.id,
-          downloadId,
-          req.accessToken
-        );
-
-        return res.status(404).json({
-          error:
-            "Este vídeo já expirou."
-        });
-      }
-
-      const encodedPath =
-        download.storage_path
-          .split("/")
-          .map(
-            part =>
-              encodeURIComponent(part)
-          )
-          .join("/");
-
-      const storageUrl =
-        `${SUPABASE_URL}/storage/v1/object/${DOWNLOADS_BUCKET}/${encodedPath}`;
-
-      const storageHeaders = {
-        Authorization:
-          `Bearer ${req.accessToken}`,
-
-        apikey:
-          SUPABASE_ANON_KEY
-      };
-
-      /*
-        Encaminha Range para permitir
-        reprodução por partes no navegador.
-      */
-      if (req.headers.range) {
-
-        storageHeaders.Range =
-          req.headers.range;
-      }
-
-      const storageResponse =
-        await fetch(
-          storageUrl,
-          {
-            method: "GET",
-
-            headers:
-              storageHeaders
-          }
-        );
-
-      if (!storageResponse.ok) {
-
-        let details = "";
-
-        try {
-          details =
-            await storageResponse.text();
-        } catch {
-          details = "";
-        }
-
-        console.error(
-          "GeraMix: Storage não entregou o vídeo.",
-          storageResponse.status,
-          details
-        );
-
-        return res.sendStatus(
-          storageResponse.status === 404
-            ? 404
-            : 500
-        );
-      }
-
-      const contentType =
-        storageResponse.headers.get(
-          "content-type"
-        ) ||
-        "video/mp4";
-
-      const contentLength =
-        storageResponse.headers.get(
-          "content-length"
-        );
-
-      const contentRange =
-        storageResponse.headers.get(
-          "content-range"
-        );
-
-      res.setHeader(
-        "Content-Type",
-        contentType
-      );
-
-      res.setHeader(
-        "Accept-Ranges",
-        "bytes"
-      );
-
-      res.setHeader(
-        "Cache-Control",
-        "private, no-store"
-      );
-
-      res.setHeader(
-        "Content-Disposition",
-        `inline; filename="${safeName(
-          download.file_name
-        )}"`
-      );
-
-      if (contentLength) {
-
-        res.setHeader(
-          "Content-Length",
-          contentLength
-        );
-      }
-
-      if (contentRange) {
-
-        res.statusCode = 206;
-
-        res.setHeader(
-          "Content-Range",
-          contentRange
-        );
-
-      } else {
-
-        res.statusCode = 200;
-      }
-
-      if (!storageResponse.body) {
-
-        return res.end();
-      }
-
-      const readable =
-        Readable.fromWeb(
-          storageResponse.body
-        );
-
-      readable.on(
-        "error",
-        error => {
-
-          console.error(
-            "GeraMix: erro transmitindo vídeo da Central:",
-            error
-          );
-
-          if (!res.headersSent) {
-
-            res
-              .status(500)
-              .end();
-
-          } else {
-
-            res.destroy(error);
-          }
-        }
-      );
-
-      readable.pipe(res);
-
-    } catch (error) {
-
-      console.error(
-        "GeraMix: erro na reprodução do download:",
-        error
-      );
-
-      if (!res.headersSent) {
-
-        return res
-          .status(500)
-          .json({
-            error:
-              "Não foi possível abrir o vídeo."
-          });
-      }
-
-      res.destroy(error);
-    }
-
-  }
-);
-
-/* =========================================================
-   CENTRAL DE DOWNLOADS
-   EXCLUI UM VÍDEO
-========================================================= */
-
-app.delete(
-  "/api/downloads/:id",
-
-  requireAuth,
-
-  async (req, res) => {
-
-    try {
-
-      const downloadId =
-        String(
-          req.params.id || ""
-        ).trim();
-
-      if (!/^\d+$/.test(downloadId)) {
-
-        return res.status(400).json({
-          error:
-            "ID de download inválido."
-        });
-      }
-
-      const result =
-        await deleteDownloadById(
-          req.user.id,
-          downloadId,
-          req.accessToken
-        );
-
-      if (!result.found) {
-
-        return res.status(404).json({
-          error:
-            "Vídeo não encontrado."
-        });
-      }
-
-      res.json({
-        ok: true
-      });
-
-    } catch (error) {
-
-      console.error(
-        "GeraMix: erro excluindo download:",
-        error
-      );
-
-      res.status(500).json({
-        error:
-          error?.message ||
-          "Não foi possível excluir o vídeo."
-      });
-    }
-
   }
 );
 
@@ -2799,6 +2132,12 @@ app.get(
                 file.name
             }
           );
+
+          /*
+            O stream é consumido pelo Archiver.
+            A remoção do arquivo é feita depois que
+            o stream terminar.
+          */
 
           await new Promise(
             (resolve, reject) => {
