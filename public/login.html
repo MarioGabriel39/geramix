@@ -58,6 +58,18 @@
       border: none;
       cursor: pointer;
     }
+
+    .forgot {
+      color: #8ab4ff;
+      text-decoration: none;
+      font-size: 14px;
+      margin-top: 2px;
+      margin-bottom: 4px;
+    }
+
+    .forgot:hover {
+      text-decoration: underline;
+    }
   </style>
 </head>
 
@@ -68,46 +80,78 @@
     <p>Acesso restrito</p>
 
     <form novalidate>
-      <input type="email" placeholder="E-mail" required>
+      <input
+        type="email"
+        placeholder="E-mail"
+        required
+      >
 
-      <input type="password" placeholder="Senha" required>
+      <input
+        type="password"
+        placeholder="Senha"
+        required
+      >
 
-      <button type="submit">Entrar</button>
+      <a class="forgot" href="/recuperar-senha.html">
+        Esqueci minha senha
+      </a>
 
-      <button type="button" onclick="window.location.href='/cadastro.html'">
+      <button type="submit">
+        Entrar
+      </button>
+
+      <button
+        type="button"
+        onclick="window.location.href='/cadastro.html'"
+      >
         Criar conta
       </button>
     </form>
   </div>
 
   <script>
-    const SUPABASE_URL = 'https://xbhztvjdzqpsdjtwmpys.supabase.co';
+    const SUPABASE_URL =
+      'https://xbhztvjdzqpsdjtwmpys.supabase.co';
 
-    const SUPABASE_ANON_KEY = 'sb_publishable_1QZy7zvLfCrUjSS2fZGWaQ_8svC39fb';
+    const SUPABASE_ANON_KEY =
+      'SUA_PUBLISHABLE_KEY_AQUI';
 
-    const supabaseClient = window.supabase.createClient(
-      SUPABASE_URL,
-      SUPABASE_ANON_KEY
-    );
+    const supabaseClient =
+      window.supabase.createClient(
+        SUPABASE_URL,
+        SUPABASE_ANON_KEY
+      );
 
-    document.querySelector('form').addEventListener('submit', async (e) => {
-      e.preventDefault();
+    document
+      .querySelector('form')
+      .addEventListener('submit', async (e) => {
 
-      const email = document.querySelector('input[type="email"]').value;
-      const senha = document.querySelector('input[type="password"]').value;
+        e.preventDefault();
 
-      const { error } = await supabaseClient.auth.signInWithPassword({
-        email: email,
-        password: senha
+        const email =
+          document.querySelector(
+            'input[type="email"]'
+          ).value;
+
+        const senha =
+          document.querySelector(
+            'input[type="password"]'
+          ).value;
+
+        const { error } =
+          await supabaseClient.auth.signInWithPassword({
+            email: email,
+            password: senha
+          });
+
+        if (error) {
+          alert(error.message);
+          return;
+        }
+
+        window.location.href =
+          '/dashboard.html';
       });
-
-      if (error) {
-        alert(error.message);
-        return;
-      }
-
-      window.location.href = '/dashboard.html';
-    });
   </script>
 
 </body>
