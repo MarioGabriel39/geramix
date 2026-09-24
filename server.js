@@ -372,7 +372,6 @@ async function releaseVideoQuota(
               p_amount:
                 amount
             })
-          }
         }
       );
 
@@ -1533,10 +1532,6 @@ async function processJob(
 
   try {
 
-    /* ================================================
-       1. GANCHOS
-    ================================================ */
-
     job.current =
       "Preparando ganchos…";
 
@@ -1576,10 +1571,6 @@ async function processJob(
         }
       );
     }
-
-    /* ================================================
-       2. CORPOS
-    ================================================ */
 
     job.current =
       "Preparando corpos…";
@@ -1621,10 +1612,6 @@ async function processJob(
       );
     }
 
-    /* ================================================
-       3. CTAs
-    ================================================ */
-
     job.current =
       "Preparando CTAs…";
 
@@ -1665,10 +1652,6 @@ async function processJob(
       );
     }
 
-    /* ================================================
-       INPUTS DO STORAGE NÃO SÃO MAIS NECESSÁRIOS
-    ================================================ */
-
     if (
       inputStorageFiles.length
     ) {
@@ -1687,12 +1670,7 @@ async function processJob(
 
       job.inputStorageFiles =
         [];
-
     }
-
-    /* ================================================
-       4. PREPARA COMBINAÇÕES
-    ================================================ */
 
     job.current =
       "Preparando combinações…";
@@ -1843,18 +1821,10 @@ async function processJob(
       }
     }
 
-    /* ================================================
-       5. ORDENA
-    ================================================ */
-
     job.files.sort(
       (a, b) =>
         a.index - b.index
     );
-
-    /* ================================================
-       6. GERA E ENVIA CADA VÍDEO
-    ================================================ */
 
     job.done = 0;
 
@@ -1953,10 +1923,6 @@ async function processJob(
       }
     }
 
-    /* ================================================
-       7. FINALIZADO
-    ================================================ */
-
     job.current =
       "Concluído";
 
@@ -2016,10 +1982,6 @@ async function processJob(
 
     }
 
-    /*
-      Limpa qualquer input que ainda tenha
-      permanecido no Storage.
-    */
     if (
       Array.isArray(
         job.inputStorageFiles
@@ -2046,7 +2008,6 @@ async function processJob(
 
 /* =========================================================
    NOVO FLUXO PARA VERCEL
-   O NAVEGADOR ENVIA OS VÍDEOS DIRETAMENTE AO STORAGE
 ========================================================= */
 
 app.post(
@@ -2157,10 +2118,6 @@ app.post(
         )
       ];
 
-      /*
-        Confere se cada caminho pertence ao usuário
-        autenticado e ao job enviado.
-      */
       for (
         const item
         of allItems
@@ -2193,10 +2150,6 @@ app.post(
           });
         }
       }
-
-      /* ================================================
-         RESERVA COTA
-      ================================================ */
 
       let quota;
 
@@ -2295,10 +2248,6 @@ app.post(
         job
       );
 
-      /*
-        Responde somente depois de registrar o job.
-        O front-end começa a acompanhar o processamento.
-      */
       res.json({
         id,
 
@@ -2310,10 +2259,6 @@ app.post(
         monthlyLimit:
           quota.monthlyLimit
       });
-
-      /* ================================================
-         BAIXA OS INPUTS DO STORAGE PARA /tmp
-      ================================================ */
 
       const localHooks = [];
       const localBodies = [];
@@ -2435,11 +2380,6 @@ app.post(
           });
         }
 
-        /*
-          Os arquivos agora estão no /tmp.
-          A partir daqui o processamento é exatamente
-          o mesmo do fluxo antigo.
-        */
         await processJob({
           job,
 
@@ -2465,10 +2405,6 @@ app.post(
           error
         );
 
-        /*
-          Se o processJob não conseguiu iniciar,
-          ainda precisamos devolver a cota.
-        */
         if (
           job.status ===
           "processing"
@@ -2771,9 +2707,6 @@ app.post(
         quota.monthlyLimit
     });
 
-    /*
-      Render continua usando o fluxo antigo.
-    */
     processJob({
       job,
 
@@ -2967,10 +2900,6 @@ app.get(
             }
           );
 
-          /*
-            Espera o stream terminar antes
-            de apagar o arquivo temporário.
-          */
           await new Promise(
             (resolve, reject) => {
 
@@ -3419,7 +3348,6 @@ app.listen(
           ? "Supabase Storage direto"
           : "Multipart"
       }`
-    );
 
   }
 );
