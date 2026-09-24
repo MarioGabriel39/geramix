@@ -31,7 +31,7 @@ const SUPABASE_ANON_KEY =
 
 if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
   throw new Error(
-    "SUPABASE_URL e SUPABASE_ANON_KEY precisam estar configuradas."
+    "SUPABASE_URL e SUPABASE_ANON_KEY precisam estar configuradas no Render."
   );
 }
 
@@ -50,17 +50,6 @@ await Promise.all([
 
 app.use(express.static(PUBLIC));
 
-/*
-  Usado somente pelo novo fluxo do Vercel.
-  O limite é pequeno porque agora o Vercel recebe
-  apenas JSON com caminhos dos arquivos no Storage.
-*/
-app.use(
-  express.json({
-    limit: "1mb"
-  })
-);
-
 /* =========================================================
    CONFIGURAÇÃO DO FRONT-END
 ========================================================= */
@@ -72,24 +61,8 @@ app.get("/api/config", (_, res) => {
   );
 
   res.json({
-    supabaseUrl:
-      SUPABASE_URL,
-
-    supabaseAnonKey:
-      SUPABASE_ANON_KEY,
-
-    /*
-      No Vercel:
-      o navegador envia os vídeos diretamente
-      para o Supabase Storage.
-
-      No Render:
-      continua usando o upload multipart antigo.
-    */
-    uploadMode:
-      process.env.VERCEL
-        ? "storage"
-        : "multipart"
+    supabaseUrl: SUPABASE_URL,
+    supabaseAnonKey: SUPABASE_ANON_KEY
   });
 });
 
@@ -205,11 +178,14 @@ async function requireAuth(req, res, next) {
       });
     }
 
-    req.user =
-      user;
+    req.user = user;
 
-    req.accessToken =
-      token;
+    /*
+      Guarda o token real da sessão para que,
+      posteriormente, o servidor possa chamar
+      as funções seguras de cota e Storage no Supabase.
+    */
+    req.accessToken = token;
 
     next();
 
@@ -435,6 +411,9 @@ const FFMPEG_CONCURRENCY = 1;
 
 const MAX_COMBINATIONS = 150;
 
+/*
+  Bucket privado já criado no Supabase.
+*/
 const DOWNLOADS_BUCKET =
   "geramix-downloads";
 
@@ -539,7 +518,7 @@ async function hasAudio(input, cwd) {
 }
 
 /* =========================================================
-   NORMALIZA UM VÍDEO
+   NORMALIZA UM VÍDEO UMA ÚNICA VEZ
 ========================================================= */
 
 async function normalizeVideo(
@@ -624,7 +603,7 @@ async function normalizeVideo(
 }
 
 /* =========================================================
-   JUNTA 3 VÍDEOS
+   JUNTA 3 VÍDEOS NORMALIZADOS
 ========================================================= */
 
 async function concatNormalized(
@@ -759,267 +738,7 @@ function getStoragePath(
 }
 
 /* =========================================================
-   CAMINHO DE INPUT TEMPORÁRIO NO STORAGE
-========================================================= */
-
-function getInputStoragePath(
-  userId,
-  jobId,
-  category,
-  index,
-  originalName
-) {
-
-  const ext =
-    path.extname(
-      String(
-        originalName || ""
-      )
-    )
-    .toLowerCase()
-    .replace(
-      /[^a-z0-9.]/g,
-      ""
-    );
-
-  const safeExt =
-    ext &&
-    ext.length <= 10
-      ? ext
-      : ".mp4";
-
-  return [
-    String(userId),
-    "inputs",
-    String(jobId),
-    String(category),
-    `${String(index + 1).padStart(3, "0")}-${crypto.randomUUID()}${safeExt}`
-  ].join("/");
-}
-
-/* =========================================================
-   VALIDA CAMINHO DE INPUT
-========================================================= */
-
-function isValidInputStoragePath(
-  userId,
-  storagePath,
-  jobId,
-  category
-) {
-
-  if (
-    typeof storagePath !==
-    "string"
-  ) {
-    return false;
-  }
-
-  if (
-    storagePath.includes("..") ||
-    storagePath.startsWith("/")
-  ) {
-    return false;
-  }
-
-  const prefix =
-    `${userId}/inputs/${jobId}/${category}/`;
-
-  return storagePath.startsWith(
-    prefix
-  );
-}
-
-/* =========================================================
-   DOWNLOAD DE INPUT DO SUPABASE STORAGE
-========================================================= */
-
-async function downloadStorageFile(
-  storagePath,
-  outputFile,
-  accessToken
-) {
-
-  const encodedPath =
-    storagePath
-      .split("/")
-      .map(
-        part =>
-          encodeURIComponent(part)
-      )
-      .join("/");
-
-  const response =
-    await fetch(
-      `${SUPABASE_URL}/storage/v1/object/authenticated/${DOWNLOADS_BUCKET}/${encodedPath}`,
-      {
-        method: "GET",
-
-        headers: {
-          Authorization:
-            `Bearer ${accessToken}`,
-
-          apikey:
-            SUPABASE_ANON_KEY
-        }
-      }
-    );
-
-  if (!response.ok) {
-
-    let details = "";
-
-    try {
-      details =
-        await response.text();
-    } catch {
-      details = "";
-    }
-
-    throw new Error(
-      "Não foi possível baixar o vídeo de origem do Storage." +
-      (details
-        ? ` ${details}`
-        : "")
-    );
-  }
-
-  if (!response.body) {
-    throw new Error(
-      "O Storage não retornou o conteúdo do vídeo."
-    );
-  }
-
-  const fileHandle =
-    await fsp.open(
-      outputFile,
-      "w"
-    );
-
-  try {
-
-    const writable =
-      fileHandle.createWriteStream();
-
-    await response.body.pipeTo(
-      new WritableStream({
-        write(chunk) {
-          return new Promise(
-            (resolve, reject) => {
-              writable.write(
-                Buffer.from(chunk),
-                error => {
-                  if (error) {
-                    reject(error);
-                  } else {
-                    resolve();
-                  }
-                }
-              );
-            }
-          );
-        },
-
-        close() {
-          return new Promise(
-            (resolve, reject) => {
-              writable.end(
-                error => {
-                  if (error) {
-                    reject(error);
-                  } else {
-                    resolve();
-                  }
-                }
-              );
-            }
-          );
-        },
-
-        abort(error) {
-          writable.destroy(error);
-        }
-      })
-    );
-
-  } finally {
-
-    await fileHandle.close();
-
-  }
-}
-
-/* =========================================================
-   EXCLUI INPUT DO STORAGE
-========================================================= */
-
-async function deleteInputFromStorage(
-  storagePath,
-  accessToken
-) {
-
-  const encodedPath =
-    storagePath
-      .split("/")
-      .map(
-        part =>
-          encodeURIComponent(part)
-      )
-      .join("/");
-
-  try {
-
-    const response =
-      await fetch(
-        `${SUPABASE_URL}/storage/v1/object/${DOWNLOADS_BUCKET}/${encodedPath}`,
-        {
-          method: "DELETE",
-
-          headers: {
-            Authorization:
-              `Bearer ${accessToken}`,
-
-            apikey:
-              SUPABASE_ANON_KEY
-          }
-        }
-      );
-
-    if (!response.ok) {
-
-      let details = "";
-
-      try {
-        details =
-          await response.text();
-      } catch {
-        details = "";
-      }
-
-      console.error(
-        "GeraMix: erro ao excluir input do Storage.",
-        response.status,
-        details
-      );
-
-      return false;
-    }
-
-    return true;
-
-  } catch (error) {
-
-    console.error(
-      "GeraMix: erro excluindo input do Storage:",
-      error
-    );
-
-    return false;
-  }
-}
-
-/* =========================================================
-   UPLOAD DE VÍDEO FINAL PARA STORAGE
+   UPLOAD DE VÍDEO PARA O SUPABASE STORAGE
 ========================================================= */
 
 async function uploadVideoToStorage(
@@ -1115,12 +834,11 @@ async function uploadVideoToStorage(
   } finally {
 
     stream.destroy();
-
   }
 }
 
 /* =========================================================
-   EXCLUI VÍDEO DO STORAGE
+   EXCLUI VÍDEO DO SUPABASE STORAGE
 ========================================================= */
 
 async function deleteVideoFromStorage(
@@ -1278,7 +996,7 @@ async function registerDownload(
 }
 
 /* =========================================================
-   EXCLUI REGISTROS DE DOWNLOAD
+   EXCLUI REGISTROS DE DOWNLOAD DE UM JOB
 ========================================================= */
 
 async function deleteDownloadRecords(
@@ -1355,10 +1073,7 @@ async function cleanupStoredDownloads(
   accessToken
 ) {
 
-  if (
-    !job ||
-    !Array.isArray(job.downloads)
-  ) {
+  if (!job || !Array.isArray(job.downloads)) {
     return;
   }
 
@@ -1389,7 +1104,7 @@ async function cleanupStoredDownloads(
 }
 
 /* =========================================================
-   MULTER
+   CONFIGURAÇÃO DO UPLOAD
 ========================================================= */
 
 const upload =
@@ -1408,11 +1123,10 @@ const upload =
    JOBS
 ========================================================= */
 
-const jobs =
-  new Map();
+const jobs = new Map();
 
 /* =========================================================
-   OBTÉM VÍDEOS NORMALIZADOS
+   OBTÉM OS VÍDEOS NORMALIZADOS DE UMA COMBINAÇÃO
 ========================================================= */
 
 function getCombinationFiles(
@@ -1505,991 +1219,7 @@ async function createVideoForJob(
 }
 
 /* =========================================================
-   PROCESSAMENTO COMUM
-========================================================= */
-
-async function processJob(
-  {
-    job,
-    hooks,
-    bodies,
-    ctas,
-    dir,
-    accessToken
-  }
-) {
-
-  const normalizedHooks = [];
-  const normalizedBodies = [];
-  const normalizedCtas = [];
-
-  const inputStorageFiles =
-    Array.isArray(
-      job.inputStorageFiles
-    )
-      ? job.inputStorageFiles
-      : [];
-
-  try {
-
-    job.current =
-      "Preparando ganchos…";
-
-    for (
-      let i = 0;
-      i < hooks.length;
-      i++
-    ) {
-
-      const file =
-        hooks[i];
-
-      const output =
-        path.join(
-          dir,
-          `hook-${String(i + 1).padStart(3, "0")}.mp4`
-        );
-
-      await normalizeVideo(
-        file.path,
-        output,
-        dir
-      );
-
-      normalizedHooks.push({
-        source:
-          file,
-
-        path:
-          output
-      });
-
-      await fsp.rm(
-        file.path,
-        {
-          force: true
-        }
-      );
-    }
-
-    job.current =
-      "Preparando corpos…";
-
-    for (
-      let i = 0;
-      i < bodies.length;
-      i++
-    ) {
-
-      const file =
-        bodies[i];
-
-      const output =
-        path.join(
-          dir,
-          `body-${String(i + 1).padStart(3, "0")}.mp4`
-        );
-
-      await normalizeVideo(
-        file.path,
-        output,
-        dir
-      );
-
-      normalizedBodies.push({
-        source:
-          file,
-
-        path:
-          output
-      });
-
-      await fsp.rm(
-        file.path,
-        {
-          force: true
-        }
-      );
-    }
-
-    job.current =
-      "Preparando CTAs…";
-
-    for (
-      let i = 0;
-      i < ctas.length;
-      i++
-    ) {
-
-      const file =
-        ctas[i];
-
-      const output =
-        path.join(
-          dir,
-          `cta-${String(i + 1).padStart(3, "0")}.mp4`
-        );
-
-      await normalizeVideo(
-        file.path,
-        output,
-        dir
-      );
-
-      normalizedCtas.push({
-        source:
-          file,
-
-        path:
-          output
-      });
-
-      await fsp.rm(
-        file.path,
-        {
-          force: true
-        }
-      );
-    }
-
-    if (
-      inputStorageFiles.length
-    ) {
-
-      for (
-        const storagePath
-        of inputStorageFiles
-      ) {
-
-        await deleteInputFromStorage(
-          storagePath,
-          accessToken
-        );
-
-      }
-
-      job.inputStorageFiles =
-        [];
-    }
-
-    job.current =
-      "Preparando combinações…";
-
-    let index = 0;
-
-    for (
-      let hookIndex = 0;
-      hookIndex <
-      normalizedHooks.length;
-      hookIndex++
-    ) {
-
-      for (
-        let bodyIndex = 0;
-        bodyIndex <
-        normalizedBodies.length;
-        bodyIndex++
-      ) {
-
-        for (
-          let ctaIndex = 0;
-          ctaIndex <
-          normalizedCtas.length;
-          ctaIndex++
-        ) {
-
-          index++;
-
-          const hook =
-            normalizedHooks[
-              hookIndex
-            ];
-
-          const body =
-            normalizedBodies[
-              bodyIndex
-            ];
-
-          const cta =
-            normalizedCtas[
-              ctaIndex
-            ];
-
-          job.current =
-            `Preparando vídeos: ${index}/${job.total}`;
-
-          const currentCombination = {
-            hook: {
-              path:
-                hook.source.path
-            },
-
-            body: {
-              path:
-                body.source.path
-            },
-
-            cta: {
-              path:
-                cta.source.path
-            }
-          };
-
-          const previousIndex =
-            index - 2;
-
-          const previousCombination =
-            previousIndex >= 0
-              ? {
-                  hook: {
-                    path:
-                      normalizedHooks[
-                        Math.floor(
-                          previousIndex /
-                          (
-                            normalizedBodies.length *
-                            normalizedCtas.length
-                          )
-                        )
-                      ]?.source.path
-                  },
-
-                  body: {
-                    path:
-                      normalizedBodies[
-                        Math.floor(
-                          (
-                            previousIndex /
-                            normalizedCtas.length
-                          ) %
-                          normalizedBodies.length
-                        )
-                      ]?.source.path
-                  },
-
-                  cta: {
-                    path:
-                      normalizedCtas[
-                        previousIndex %
-                        normalizedCtas.length
-                      ]?.source.path
-                  }
-                }
-              : null;
-
-          const originality =
-            calculateOriginality(
-              currentCombination,
-              previousCombination
-            );
-
-          job.files.push({
-
-            name:
-              `video-${String(index).padStart(3, "0")}.mp4`,
-
-            hook:
-              safeName(
-                hook.source.originalname
-              ),
-
-            body:
-              safeName(
-                body.source.originalname
-              ),
-
-            cta:
-              safeName(
-                cta.source.originalname
-              ),
-
-            hookIndex:
-              hookIndex + 1,
-
-            bodyIndex:
-              bodyIndex + 1,
-
-            ctaIndex:
-              ctaIndex + 1,
-
-            index,
-
-            originality
-          });
-
-        }
-      }
-    }
-
-    job.files.sort(
-      (a, b) =>
-        a.index - b.index
-    );
-
-    job.done = 0;
-
-    for (
-      let i = 0;
-      i < job.files.length;
-      i++
-    ) {
-
-      const file =
-        job.files[i];
-
-      const position =
-        i + 1;
-
-      job.current =
-        `Gerando vídeo ${position}/${job.total}…`;
-
-      const tempVideo =
-        await createVideoForJob(
-          job,
-          file
-        );
-
-      const storagePath =
-        getStoragePath(
-          job.userId,
-          job.id,
-          file.name
-        );
-
-      try {
-
-        job.current =
-          `Enviando vídeo ${position}/${job.total}…`;
-
-        await uploadVideoToStorage(
-          tempVideo,
-          storagePath,
-          accessToken
-        );
-
-        await registerDownload(
-          {
-            userId:
-              job.userId,
-
-            jobId:
-              job.id,
-
-            fileName:
-              file.name,
-
-            storagePath,
-
-            originality:
-              file.originality
-          },
-          accessToken
-        );
-
-        job.downloads.push({
-          fileName:
-            file.name,
-
-          storagePath,
-
-          originality:
-            file.originality
-        });
-
-        job.done =
-          position;
-
-        job.current =
-          `Vídeo ${position}/${job.total} concluído.`;
-
-      } catch (error) {
-
-        await deleteVideoFromStorage(
-          storagePath,
-          accessToken
-        );
-
-        throw error;
-
-      } finally {
-
-        await fsp.rm(
-          tempVideo,
-          {
-            force: true
-          }
-        );
-
-      }
-    }
-
-    job.current =
-      "Concluído";
-
-    job.status =
-      "done";
-
-    job.zip =
-      `/api/jobs/${job.id}/zip`;
-
-    console.log(
-      `GeraMix: job ${job.id} concluído com ${job.total} vídeo(s) armazenado(s).`
-    );
-
-  } catch (error) {
-
-    console.error(
-      "Erro no processamento:",
-      error
-    );
-
-    await cleanupStoredDownloads(
-      job,
-      accessToken
-    );
-
-    await releaseVideoQuota(
-      job.userId,
-      accessToken,
-      job.total
-    );
-
-    job.status =
-      "error";
-
-    job.error =
-      error?.message ||
-      "Erro desconhecido";
-
-    job.current =
-      "Falhou";
-
-    for (
-      const file
-      of [
-        ...hooks,
-        ...bodies,
-        ...ctas
-      ]
-    ) {
-
-      await fsp.rm(
-        file.path,
-        {
-          force: true
-        }
-      ).catch(() => {});
-
-    }
-
-    if (
-      Array.isArray(
-        job.inputStorageFiles
-      )
-    ) {
-
-      for (
-        const storagePath
-        of job.inputStorageFiles
-      ) {
-
-        await deleteInputFromStorage(
-          storagePath,
-          accessToken
-        );
-
-      }
-
-      job.inputStorageFiles =
-        [];
-    }
-  }
-}
-
-/* =========================================================
-   NOVO FLUXO PARA VERCEL
-========================================================= */
-
-app.post(
-  "/api/jobs/storage",
-
-  requireAuth,
-
-  async (req, res) => {
-
-    try {
-
-      const hooks =
-        Array.isArray(req.body?.hooks)
-          ? req.body.hooks
-          : [];
-
-      const bodies =
-        Array.isArray(req.body?.bodies)
-          ? req.body.bodies
-          : [];
-
-      const ctas =
-        Array.isArray(req.body?.ctas)
-          ? req.body.ctas
-          : [];
-
-      const clientJobId =
-        String(
-          req.body?.id || ""
-        ).trim();
-
-      if (
-        !clientJobId ||
-        !/^[0-9a-f-]{36}$/i.test(
-          clientJobId
-        )
-      ) {
-
-        return res.status(400).json({
-          error:
-            "Identificador do processamento inválido."
-        });
-      }
-
-      if (
-        !hooks.length ||
-        !bodies.length ||
-        !ctas.length
-      ) {
-
-        return res.status(400).json({
-          error:
-            "Envie pelo menos 1 vídeo em cada categoria."
-        });
-      }
-
-      if (
-        hooks.length > 5 ||
-        bodies.length > 5 ||
-        ctas.length > 6
-      ) {
-
-        return res.status(400).json({
-          error:
-            "Quantidade máxima: 5 ganchos, 5 corpos e 6 CTAs."
-        });
-      }
-
-      const total =
-        hooks.length *
-        bodies.length *
-        ctas.length;
-
-      if (
-        total >
-        MAX_COMBINATIONS
-      ) {
-
-        return res.status(400).json({
-          error:
-            `Limite de ${MAX_COMBINATIONS} combinações por lote.`
-        });
-      }
-
-      const allItems = [
-        ...hooks.map(
-          item => ({
-            ...item,
-            category:
-              "hooks"
-          })
-        ),
-
-        ...bodies.map(
-          item => ({
-            ...item,
-            category:
-              "bodies"
-          })
-        ),
-
-        ...ctas.map(
-          item => ({
-            ...item,
-            category:
-              "ctas"
-          })
-        )
-      ];
-
-      for (
-        const item
-        of allItems
-      ) {
-
-        if (
-          !item ||
-          typeof item.path !==
-            "string"
-        ) {
-
-          return res.status(400).json({
-            error:
-              "Um dos vídeos enviados possui caminho inválido."
-          });
-        }
-
-        if (
-          !isValidInputStoragePath(
-            req.user.id,
-            item.path,
-            clientJobId,
-            item.category
-          )
-        ) {
-
-          return res.status(403).json({
-            error:
-              "Um dos arquivos enviados não pertence à sua sessão."
-          });
-        }
-      }
-
-      let quota;
-
-      try {
-
-        quota =
-          await reserveVideoQuota(
-            req.user.id,
-            req.accessToken,
-            total
-          );
-
-      } catch (error) {
-
-        return res.status(503).json({
-          error:
-            error?.message ||
-            "Não foi possível verificar sua cota mensal."
-        });
-      }
-
-      if (!quota.allowed) {
-
-        return res.status(403).json({
-
-          error:
-            quota.message ||
-            "Limite mensal de vídeos atingido.",
-
-          videosUsed:
-            quota.videosUsed,
-
-          monthlyLimit:
-            quota.monthlyLimit
-        });
-      }
-
-      const id =
-        clientJobId;
-
-      const dir =
-        path.join(
-          JOBS,
-          id
-        );
-
-      await fsp.mkdir(
-        dir,
-        {
-          recursive: true
-        }
-      );
-
-      const job = {
-        id,
-
-        userId:
-          req.user.id,
-
-        status:
-          "processing",
-
-        total,
-
-        done:
-          0,
-
-        current:
-          "Baixando vídeos enviados…",
-
-        files: [],
-
-        downloads: [],
-
-        error:
-          null,
-
-        mode:
-          "storage-direto",
-
-        videosUsed:
-          quota.videosUsed,
-
-        monthlyLimit:
-          quota.monthlyLimit,
-
-        inputStorageFiles:
-          allItems.map(
-            item =>
-              item.path
-          )
-      };
-
-      jobs.set(
-        id,
-        job
-      );
-
-      res.json({
-        id,
-
-        total,
-
-        videosUsed:
-          quota.videosUsed,
-
-        monthlyLimit:
-          quota.monthlyLimit
-      });
-
-      const localHooks = [];
-      const localBodies = [];
-      const localCtas = [];
-
-      try {
-
-        for (
-          let i = 0;
-          i < hooks.length;
-          i++
-        ) {
-
-          const item =
-            hooks[i];
-
-          const originalname =
-            String(
-              item.originalname ||
-              `hook-${i + 1}.mp4`
-            );
-
-          const localPath =
-            path.join(
-              dir,
-              `input-hook-${String(i + 1).padStart(3, "0")}-${crypto.randomUUID()}${path.extname(originalname) || ".mp4"}`
-            );
-
-          job.current =
-            `Baixando gancho ${i + 1}/${hooks.length}…`;
-
-          await downloadStorageFile(
-            item.path,
-            localPath,
-            req.accessToken
-          );
-
-          localHooks.push({
-            path:
-              localPath,
-
-            originalname
-          });
-        }
-
-        for (
-          let i = 0;
-          i < bodies.length;
-          i++
-        ) {
-
-          const item =
-            bodies[i];
-
-          const originalname =
-            String(
-              item.originalname ||
-              `body-${i + 1}.mp4`
-            );
-
-          const localPath =
-            path.join(
-              dir,
-              `input-body-${String(i + 1).padStart(3, "0")}-${crypto.randomUUID()}${path.extname(originalname) || ".mp4"}`
-            );
-
-          job.current =
-            `Baixando corpo ${i + 1}/${bodies.length}…`;
-
-          await downloadStorageFile(
-            item.path,
-            localPath,
-            req.accessToken
-          );
-
-          localBodies.push({
-            path:
-              localPath,
-
-            originalname
-          });
-        }
-
-        for (
-          let i = 0;
-          i < ctas.length;
-          i++
-        ) {
-
-          const item =
-            ctas[i];
-
-          const originalname =
-            String(
-              item.originalname ||
-              `cta-${i + 1}.mp4`
-            );
-
-          const localPath =
-            path.join(
-              dir,
-              `input-cta-${String(i + 1).padStart(3, "0")}-${crypto.randomUUID()}${path.extname(originalname) || ".mp4"}`
-            );
-
-          job.current =
-            `Baixando CTA ${i + 1}/${ctas.length}…`;
-
-          await downloadStorageFile(
-            item.path,
-            localPath,
-            req.accessToken
-          );
-
-          localCtas.push({
-            path:
-              localPath,
-
-            originalname
-          });
-        }
-
-        await processJob({
-          job,
-
-          hooks:
-            localHooks,
-
-          bodies:
-            localBodies,
-
-          ctas:
-            localCtas,
-
-          dir,
-
-          accessToken:
-            req.accessToken
-        });
-
-      } catch (error) {
-
-        console.error(
-          "GeraMix: erro baixando inputs do Storage:",
-          error
-        );
-
-        if (
-          job.status ===
-          "processing"
-        ) {
-
-          await cleanupStoredDownloads(
-            job,
-            req.accessToken
-          );
-
-          await releaseVideoQuota(
-            req.user.id,
-            req.accessToken,
-            total
-          );
-
-          job.status =
-            "error";
-
-          job.error =
-            error?.message ||
-            "Erro ao baixar os vídeos enviados.";
-
-          job.current =
-            "Falhou";
-
-        }
-
-        for (
-          const file
-          of [
-            ...localHooks,
-            ...localBodies,
-            ...localCtas
-          ]
-        ) {
-
-          await fsp.rm(
-            file.path,
-            {
-              force: true
-            }
-          ).catch(() => {});
-
-        }
-
-        for (
-          const storagePath
-          of job.inputStorageFiles || []
-        ) {
-
-          await deleteInputFromStorage(
-            storagePath,
-            req.accessToken
-          );
-
-        }
-
-        job.inputStorageFiles =
-          [];
-      }
-
-    } catch (error) {
-
-      console.error(
-        "GeraMix: erro no endpoint storage:",
-        error
-      );
-
-      if (!res.headersSent) {
-
-        return res.status(500).json({
-          error:
-            error?.message ||
-            "Erro interno ao iniciar processamento."
-        });
-      }
-
-    }
-
-  }
-);
-
-/* =========================================================
-   FLUXO ANTIGO / RENDER
+   CRIA JOB
 ========================================================= */
 
 app.post(
@@ -2568,6 +1298,10 @@ app.post(
           `Limite de ${MAX_COMBINATIONS} combinações por lote.`
       });
     }
+
+    /* =====================================================
+       RESERVA A COTA MENSAL
+    ===================================================== */
 
     let quota;
 
@@ -2672,6 +1406,10 @@ app.post(
 
       files: [],
 
+      /*
+        Lista dos vídeos que já foram enviados
+        para a Central de Downloads.
+      */
       downloads: [],
 
       error:
@@ -2684,10 +1422,7 @@ app.post(
         quota.videosUsed,
 
       monthlyLimit:
-        quota.monthlyLimit,
-
-      inputStorageFiles:
-        []
+        quota.monthlyLimit
     };
 
     jobs.set(
@@ -2707,20 +1442,518 @@ app.post(
         quota.monthlyLimit
     });
 
-    processJob({
-      job,
+    /* =====================================================
+       PROCESSAMENTO
+    ===================================================== */
 
-      hooks,
+    (async () => {
 
-      bodies,
+      const normalizedHooks = [];
+      const normalizedBodies = [];
+      const normalizedCtas = [];
 
-      ctas,
+      try {
 
-      dir,
+        /* ================================================
+           1. GANCHOS
+        ================================================ */
 
-      accessToken:
-        req.accessToken
-    });
+        job.current =
+          "Preparando ganchos…";
+
+        for (
+          let i = 0;
+          i < hooks.length;
+          i++
+        ) {
+
+          const file =
+            hooks[i];
+
+          const output =
+            path.join(
+              dir,
+              `hook-${String(i + 1).padStart(3, "0")}.mp4`
+            );
+
+          await normalizeVideo(
+            file.path,
+            output,
+            dir
+          );
+
+          normalizedHooks.push({
+            source:
+              file,
+
+            path:
+              output
+          });
+
+          await fsp.rm(
+            file.path,
+            {
+              force: true
+            }
+          );
+        }
+
+        /* ================================================
+           2. CORPOS
+        ================================================ */
+
+        job.current =
+          "Preparando corpos…";
+
+        for (
+          let i = 0;
+          i < bodies.length;
+          i++
+        ) {
+
+          const file =
+            bodies[i];
+
+          const output =
+            path.join(
+              dir,
+              `body-${String(i + 1).padStart(3, "0")}.mp4`
+            );
+
+          await normalizeVideo(
+            file.path,
+            output,
+            dir
+          );
+
+          normalizedBodies.push({
+            source:
+              file,
+
+            path:
+              output
+          });
+
+          await fsp.rm(
+            file.path,
+            {
+              force: true
+            }
+          );
+        }
+
+        /* ================================================
+           3. CTAs
+        ================================================ */
+
+        job.current =
+          "Preparando CTAs…";
+
+        for (
+          let i = 0;
+          i < ctas.length;
+          i++
+        ) {
+
+          const file =
+            ctas[i];
+
+          const output =
+            path.join(
+              dir,
+              `cta-${String(i + 1).padStart(3, "0")}.mp4`
+            );
+
+          await normalizeVideo(
+            file.path,
+            output,
+            dir
+          );
+
+          normalizedCtas.push({
+            source:
+              file,
+
+            path:
+              output
+          });
+
+          await fsp.rm(
+            file.path,
+            {
+              force: true
+            }
+          );
+        }
+
+        /* ================================================
+           4. PREPARA AS COMBINAÇÕES
+        ================================================ */
+
+        job.current =
+          "Preparando combinações…";
+
+        let index = 0;
+
+        for (
+          let hookIndex = 0;
+          hookIndex < normalizedHooks.length;
+          hookIndex++
+        ) {
+
+          for (
+            let bodyIndex = 0;
+            bodyIndex < normalizedBodies.length;
+            bodyIndex++
+          ) {
+
+            for (
+              let ctaIndex = 0;
+              ctaIndex < normalizedCtas.length;
+              ctaIndex++
+            ) {
+
+              index++;
+
+              const hook =
+                normalizedHooks[
+                  hookIndex
+                ];
+
+              const body =
+                normalizedBodies[
+                  bodyIndex
+                ];
+
+              const cta =
+                normalizedCtas[
+                  ctaIndex
+                ];
+
+              job.current =
+                `Preparando vídeos: ${index}/${total}`;
+
+              /* ==========================================
+                 ORIGINALIDADE
+              ========================================== */
+
+              const currentCombination = {
+                hook: {
+                  path:
+                    hook.source.path
+                },
+
+                body: {
+                  path:
+                    body.source.path
+                },
+
+                cta: {
+                  path:
+                    cta.source.path
+                }
+              };
+
+              const previousIndex =
+                index - 2;
+
+              const previousCombination =
+                previousIndex >= 0
+                  ? {
+                      hook: {
+                        path:
+                          normalizedHooks[
+                            Math.floor(
+                              previousIndex /
+                              (
+                                normalizedBodies.length *
+                                normalizedCtas.length
+                              )
+                            )
+                          ]?.source.path
+                      },
+
+                      body: {
+                        path:
+                          normalizedBodies[
+                            Math.floor(
+                              (
+                                previousIndex /
+                                normalizedCtas.length
+                              ) %
+                              normalizedBodies.length
+                            )
+                          ]?.source.path
+                      },
+
+                      cta: {
+                        path:
+                          normalizedCtas[
+                            previousIndex %
+                            normalizedCtas.length
+                          ]?.source.path
+                      }
+                    }
+                  : null;
+
+              const originality =
+                calculateOriginality(
+                  currentCombination,
+                  previousCombination
+                );
+
+              /* ==========================================
+                 SALVA OS DADOS DA COMBINAÇÃO
+              ========================================== */
+
+              job.files.push({
+
+                name:
+                  `video-${String(index).padStart(3, "0")}.mp4`,
+
+                hook:
+                  safeName(
+                    hook.source.originalname
+                  ),
+
+                body:
+                  safeName(
+                    body.source.originalname
+                  ),
+
+                cta:
+                  safeName(
+                    cta.source.originalname
+                  ),
+
+                hookIndex:
+                  hookIndex + 1,
+
+                bodyIndex:
+                  bodyIndex + 1,
+
+                ctaIndex:
+                  ctaIndex + 1,
+
+                index,
+
+                originality
+              });
+            }
+          }
+        }
+
+        /* ================================================
+           5. ORDENA
+        ================================================ */
+
+        job.files.sort(
+          (a, b) =>
+            a.index - b.index
+        );
+
+        /*
+          Até aqui só preparamos as combinações.
+          Agora começa a geração real dos vídeos.
+        */
+
+        job.done = 0;
+
+        /* ================================================
+           6. GERA E ENVIA CADA VÍDEO PARA O STORAGE
+        ================================================ */
+
+        for (
+          let i = 0;
+          i < job.files.length;
+          i++
+        ) {
+
+          const file =
+            job.files[i];
+
+          const position =
+            i + 1;
+
+          job.current =
+            `Gerando vídeo ${position}/${total}…`;
+
+          /*
+            Gera somente UM MP4 final temporário.
+          */
+          const tempVideo =
+            await createVideoForJob(
+              job,
+              file
+            );
+
+          const storagePath =
+            getStoragePath(
+              job.userId,
+              job.id,
+              file.name
+            );
+
+          try {
+
+            job.current =
+              `Enviando vídeo ${position}/${total}…`;
+
+            /*
+              Envia o MP4 para o bucket privado.
+            */
+            await uploadVideoToStorage(
+              tempVideo,
+              storagePath,
+              req.accessToken
+            );
+
+            /*
+              Depois que o upload deu certo,
+              registra o vídeo na tabela downloads.
+            */
+            await registerDownload(
+              {
+                userId:
+                  job.userId,
+
+                jobId:
+                  job.id,
+
+                fileName:
+                  file.name,
+
+                storagePath,
+
+                originality:
+                  file.originality
+              },
+              req.accessToken
+            );
+
+            /*
+              Guarda em memória somente os dados necessários
+              para eventual limpeza caso o lote falhe.
+            */
+            job.downloads.push({
+              fileName:
+                file.name,
+
+              storagePath,
+
+              originality:
+                file.originality
+            });
+
+            /*
+              O vídeo foi realmente armazenado.
+            */
+            job.done =
+              position;
+
+            job.current =
+              `Vídeo ${position}/${total} concluído.`;
+
+          } catch (error) {
+
+            /*
+              Se o upload deu certo mas o registro
+              no banco falhou, tentamos remover o objeto.
+            */
+            await deleteVideoFromStorage(
+              storagePath,
+              req.accessToken
+            );
+
+            throw error;
+
+          } finally {
+
+            /*
+              Nunca mantemos os vídeos finais
+              dentro do /tmp.
+            */
+            await fsp.rm(
+              tempVideo,
+              {
+                force: true
+              }
+            );
+
+          }
+        }
+
+        /* ================================================
+           7. FINALIZADO
+        ================================================ */
+
+        job.current =
+          "Concluído";
+
+        job.status =
+          "done";
+
+        job.zip =
+          `/api/jobs/${id}/zip`;
+
+        console.log(
+          `GeraMix: job ${id} concluído com ${job.total} vídeo(s) armazenado(s).`
+        );
+
+      } catch (e) {
+
+        console.error(
+          "Erro no processamento:",
+          e
+        );
+
+        /*
+          Se alguma etapa falhou, removemos os vídeos
+          que já chegaram ao Storage e seus registros.
+        */
+        await cleanupStoredDownloads(
+          job,
+          req.accessToken
+        );
+
+        /*
+          A cota foi reservada antes do processamento.
+          Como o lote não terminou, devolvemos toda a cota.
+        */
+        await releaseVideoQuota(
+          req.user.id,
+          req.accessToken,
+          total
+        );
+
+        job.status =
+          "error";
+
+        job.error =
+          e?.message ||
+          "Erro desconhecido";
+
+        job.current =
+          "Falhou";
+
+        await Promise.all(
+          [
+            ...hooks,
+            ...bodies,
+            ...ctas
+          ].map(
+            file =>
+              fsp.rm(
+                file.path,
+                {
+                  force: true
+                }
+              )
+          )
+        );
+      }
+
+    })();
 
   }
 );
@@ -2900,6 +2133,12 @@ app.get(
             }
           );
 
+          /*
+            O stream é consumido pelo Archiver.
+            A remoção do arquivo é feita depois que
+            o stream terminar.
+          */
+
           await new Promise(
             (resolve, reject) => {
 
@@ -2936,6 +2175,17 @@ app.get(
         "Erro no download ZIP:",
         error
       );
+
+      await fsp.rm(
+        path.join(
+          JOBS,
+          job.id
+        ),
+        {
+          recursive: true,
+          force: true
+        }
+      ).catch(() => {});
 
       if (!res.headersSent) {
 
@@ -3341,13 +2591,6 @@ app.listen(
     console.log(
       `FFmpeg simultâneos: ${FFMPEG_CONCURRENCY}`
     );
-
-    console.log(
-      `Modo de upload: ${
-        process.env.VERCEL
-          ? "Supabase Storage direto"
-          : "Multipart"
-      }`
 
   }
 );
