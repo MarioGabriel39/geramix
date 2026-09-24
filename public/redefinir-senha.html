@@ -1,1 +1,177 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GeraMix - Nova senha</title>
 
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+  <style>
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #111;
+      color: white;
+      font-family: Arial, sans-serif;
+    }
+
+    .box {
+      width: 90%;
+      max-width: 400px;
+      text-align: center;
+    }
+
+    h1 {
+      margin-bottom: 10px;
+    }
+
+    p {
+      color: #bbb;
+      margin-bottom: 25px;
+      line-height: 1.5;
+    }
+
+    form {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    input,
+    button {
+      box-sizing: border-box;
+      width: 100%;
+      padding: 14px;
+      border-radius: 8px;
+      font-size: 16px;
+    }
+
+    input {
+      border: 1px solid #555;
+      background: #222;
+      color: white;
+    }
+
+    button {
+      border: none;
+      background: white;
+      color: #111;
+      cursor: pointer;
+      font-weight: bold;
+    }
+
+    button:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+
+    .mensagem {
+      margin-top: 18px;
+      line-height: 1.5;
+    }
+  </style>
+</head>
+
+<body>
+
+  <div class="box">
+
+    <h1>GeraMix</h1>
+
+    <p>Digite sua nova senha abaixo.</p>
+
+    <form id="formNovaSenha">
+
+      <input
+        type="password"
+        id="senha"
+        placeholder="Nova senha"
+        minlength="6"
+        required
+      >
+
+      <input
+        type="password"
+        id="confirmarSenha"
+        placeholder="Confirmar nova senha"
+        minlength="6"
+        required
+      >
+
+      <button type="submit" id="botao">
+        Salvar nova senha
+      </button>
+
+    </form>
+
+    <div class="mensagem" id="mensagem"></div>
+
+  </div>
+
+  <script>
+    const SUPABASE_URL =
+      'https://xbhztvjdzqpsdjtwmpys.supabase.co';
+
+    const SUPABASE_ANON_KEY =
+      'sb_publishable_1QZy7zvLfCrUjSS2fZGWaQ_8svC39fb';
+
+    const supabaseClient = window.supabase.createClient(
+      SUPABASE_URL,
+      SUPABASE_ANON_KEY
+    );
+
+    const form = document.getElementById('formNovaSenha');
+    const senhaInput = document.getElementById('senha');
+    const confirmarInput = document.getElementById('confirmarSenha');
+    const botao = document.getElementById('botao');
+    const mensagem = document.getElementById('mensagem');
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+
+      const senha = senhaInput.value;
+      const confirmarSenha = confirmarInput.value;
+
+      if (senha.length < 6) {
+        mensagem.textContent =
+          'A senha precisa ter pelo menos 6 caracteres.';
+        return;
+      }
+
+      if (senha !== confirmarSenha) {
+        mensagem.textContent =
+          'As senhas não são iguais.';
+        return;
+      }
+
+      botao.disabled = true;
+      botao.textContent = 'Salvando...';
+      mensagem.textContent = '';
+
+      const { error } =
+        await supabaseClient.auth.updateUser({
+          password: senha
+        });
+
+      if (error) {
+        mensagem.textContent = error.message;
+        botao.disabled = false;
+        botao.textContent = 'Salvar nova senha';
+        return;
+      }
+
+      mensagem.textContent =
+        'Senha alterada com sucesso! Redirecionando...';
+
+      setTimeout(() => {
+        window.location.href = '/login.html';
+      }, 1500);
+    });
+  </script>
+
+</body>
+</html>
