@@ -183,7 +183,7 @@ async function requireAuth(req, res, next) {
     /*
       Guarda o token real da sessão para que,
       posteriormente, o servidor possa chamar
-      as funções seguras de cota e Storage no Supabase.
+      as funções seguras de cota no Supabase.
     */
     req.accessToken = token;
 
@@ -273,6 +273,12 @@ async function reserveVideoQuota(
 
   const data =
     await response.json();
+
+  /*
+    A função RPC retorna uma tabela.
+    Portanto, normalmente recebemos um array
+    com um único registro.
+  */
 
   const result =
     Array.isArray(data)
@@ -407,15 +413,16 @@ app.get("/health", (_, res) => {
    CONFIGURAÇÕES
 ========================================================= */
 
-const FFMPEG_CONCURRENCY = 1;
+/*
+  Quantos processos FFmpeg podem trabalhar
+  simultaneamente durante a preparação.
+
+  Cada FFmpeg continua limitado a 1 thread
+  individualmente.
+*/
+const FFMPEG_CONCURRENCY = 3;
 
 const MAX_COMBINATIONS = 150;
-
-/*
-  Bucket privado já criado no Supabase.
-*/
-const DOWNLOADS_BUCKET =
-  "geramix-downloads";
 
 /* =========================================================
    FFMPEG
@@ -603,6 +610,127 @@ async function normalizeVideo(
 }
 
 /* =========================================================
+   NORMALIZA VÁRIOS VÍDEOS COM CONCORRÊNCIA CONTROLADA
+========================================================= */
+
+async function normalizeVideosWithConcurrency(
+  files,
+  category,
+  dir,
+  job
+) {
+
+  const results =
+    new Array(files.length);
+
+  let nextIndex = 0;
+
+  let firstError = null;
+
+  async function worker() {
+
+    while (true) {
+
+      const index =
+        nextIndex++;
+
+      if (
+        index >= files.length
+      ) {
+        return;
+      }
+
+      const file =
+        files[index];
+
+      const output =
+        path.join(
+          dir,
+          `${category}-${String(index + 1).padStart(3, "0")}.mp4`
+        );
+
+      try {
+
+        job.current =
+          `Preparando ${category}: ${index + 1}/${files.length}`;
+
+        await normalizeVideo(
+          file.path,
+          output,
+          dir
+        );
+
+        results[index] = {
+          source:
+            file,
+
+          path:
+            output
+        };
+
+        await fsp.rm(
+          file.path,
+          {
+            force: true
+          }
+        );
+
+      } catch (error) {
+
+        if (!firstError) {
+          firstError = error;
+        }
+
+        /*
+          Remove o arquivo parcialmente criado,
+          caso o FFmpeg tenha deixado um arquivo
+          incompleto.
+        */
+        await fsp.rm(
+          output,
+          {
+            force: true
+          }
+        ).catch(() => {});
+
+        /*
+          Remove o upload original deste item.
+        */
+        await fsp.rm(
+          file.path,
+          {
+            force: true
+          }
+        ).catch(() => {});
+      }
+    }
+  }
+
+  const workerCount =
+    Math.min(
+      FFMPEG_CONCURRENCY,
+      files.length
+    );
+
+  await Promise.all(
+    Array.from(
+      {
+        length:
+          workerCount
+      },
+      () =>
+        worker()
+    )
+  );
+
+  if (firstError) {
+    throw firstError;
+  }
+
+  return results;
+}
+
+/* =========================================================
    JUNTA 3 VÍDEOS NORMALIZADOS
 ========================================================= */
 
@@ -721,390 +849,7 @@ function calculateOriginality(
 }
 
 /* =========================================================
-   CAMINHO DO STORAGE
-========================================================= */
-
-function getStoragePath(
-  userId,
-  jobId,
-  fileName
-) {
-
-  return [
-    String(userId),
-    String(jobId),
-    String(fileName)
-  ].join("/");
-}
-
-/* =========================================================
-   UPLOAD DE VÍDEO PARA O SUPABASE STORAGE
-========================================================= */
-
-async function uploadVideoToStorage(
-  localFile,
-  storagePath,
-  accessToken
-) {
-
-  const encodedPath =
-    storagePath
-      .split("/")
-      .map(
-        part =>
-          encodeURIComponent(part)
-      )
-      .join("/");
-
-  const stat =
-    await fsp.stat(
-      localFile
-    );
-
-  const stream =
-    fs.createReadStream(
-      localFile
-    );
-
-  try {
-
-    const response =
-      await fetch(
-        `${SUPABASE_URL}/storage/v1/object/${DOWNLOADS_BUCKET}/${encodedPath}`,
-        {
-          method: "POST",
-
-          headers: {
-            Authorization:
-              `Bearer ${accessToken}`,
-
-            apikey:
-              SUPABASE_ANON_KEY,
-
-            "Content-Type":
-              "video/mp4",
-
-            "Content-Length":
-              String(stat.size),
-
-            "x-upsert":
-              "false"
-          },
-
-          body:
-            stream,
-
-          duplex:
-            "half"
-        }
-      );
-
-    if (!response.ok) {
-
-      let details = "";
-
-      try {
-        const data =
-          await response.json();
-
-        details =
-          data?.message ||
-          data?.error ||
-          data?.statusCode ||
-          "";
-      } catch {
-        try {
-          details =
-            await response.text();
-        } catch {
-          details = "";
-        }
-      }
-
-      throw new Error(
-        "Erro ao enviar vídeo para o Storage." +
-        (details
-          ? ` ${details}`
-          : "")
-      );
-    }
-
-    return true;
-
-  } finally {
-
-    stream.destroy();
-  }
-}
-
-/* =========================================================
-   EXCLUI VÍDEO DO SUPABASE STORAGE
-========================================================= */
-
-async function deleteVideoFromStorage(
-  storagePath,
-  accessToken
-) {
-
-  const encodedPath =
-    storagePath
-      .split("/")
-      .map(
-        part =>
-          encodeURIComponent(part)
-      )
-      .join("/");
-
-  try {
-
-    const response =
-      await fetch(
-        `${SUPABASE_URL}/storage/v1/object/${DOWNLOADS_BUCKET}/${encodedPath}`,
-        {
-          method: "DELETE",
-
-          headers: {
-            Authorization:
-              `Bearer ${accessToken}`,
-
-            apikey:
-              SUPABASE_ANON_KEY
-          }
-        }
-      );
-
-    if (!response.ok) {
-
-      let details = "";
-
-      try {
-        details =
-          await response.text();
-      } catch {
-        details = "";
-      }
-
-      console.error(
-        "GeraMix: erro ao excluir vídeo do Storage.",
-        response.status,
-        details
-      );
-
-      return false;
-    }
-
-    return true;
-
-  } catch (error) {
-
-    console.error(
-      "GeraMix: erro excluindo vídeo do Storage:",
-      error
-    );
-
-    return false;
-  }
-}
-
-/* =========================================================
-   REGISTRA VÍDEO NA TABELA DOWNLOADS
-========================================================= */
-
-async function registerDownload(
-  {
-    userId,
-    jobId,
-    fileName,
-    storagePath,
-    originality
-  },
-  accessToken
-) {
-
-  const response =
-    await fetch(
-      `${SUPABASE_URL}/rest/v1/downloads`,
-      {
-        method: "POST",
-
-        headers: {
-          "Content-Type":
-            "application/json",
-
-          Authorization:
-            `Bearer ${accessToken}`,
-
-          apikey:
-            SUPABASE_ANON_KEY,
-
-          Prefer:
-            "return=minimal"
-        },
-
-        body:
-          JSON.stringify({
-            user_id:
-              userId,
-
-            job_id:
-              jobId,
-
-            file_name:
-              fileName,
-
-            storage_path:
-              storagePath,
-
-            originality:
-              originality
-          })
-      }
-    );
-
-  if (!response.ok) {
-
-    let details = "";
-
-    try {
-      const data =
-        await response.json();
-
-      details =
-        data?.message ||
-        data?.msg ||
-        data?.error ||
-        data?.details ||
-        "";
-    } catch {
-      try {
-        details =
-          await response.text();
-      } catch {
-        details = "";
-      }
-    }
-
-    throw new Error(
-      "Erro ao registrar vídeo na Central de Downloads." +
-      (details
-        ? ` ${details}`
-        : "")
-    );
-  }
-
-  return true;
-}
-
-/* =========================================================
-   EXCLUI REGISTROS DE DOWNLOAD DE UM JOB
-========================================================= */
-
-async function deleteDownloadRecords(
-  userId,
-  jobId,
-  accessToken
-) {
-
-  try {
-
-    const url =
-      `${SUPABASE_URL}/rest/v1/downloads` +
-      `?user_id=eq.${encodeURIComponent(userId)}` +
-      `&job_id=eq.${encodeURIComponent(jobId)}`;
-
-    const response =
-      await fetch(
-        url,
-        {
-          method: "DELETE",
-
-          headers: {
-            Authorization:
-              `Bearer ${accessToken}`,
-
-            apikey:
-              SUPABASE_ANON_KEY,
-
-            Prefer:
-              "return=minimal"
-          }
-        }
-      );
-
-    if (!response.ok) {
-
-      let details = "";
-
-      try {
-        details =
-          await response.text();
-      } catch {
-        details = "";
-      }
-
-      console.error(
-        "GeraMix: erro ao limpar registros de downloads.",
-        response.status,
-        details
-      );
-
-      return false;
-    }
-
-    return true;
-
-  } catch (error) {
-
-    console.error(
-      "GeraMix: erro limpando registros de downloads:",
-      error
-    );
-
-    return false;
-  }
-}
-
-/* =========================================================
-   LIMPA VÍDEOS ARMAZENADOS QUANDO UM JOB FALHA
-========================================================= */
-
-async function cleanupStoredDownloads(
-  job,
-  accessToken
-) {
-
-  if (!job || !Array.isArray(job.downloads)) {
-    return;
-  }
-
-  for (
-    const download
-    of job.downloads
-  ) {
-
-    if (
-      download?.storagePath
-    ) {
-
-      await deleteVideoFromStorage(
-        download.storagePath,
-        accessToken
-      );
-
-    }
-  }
-
-  await deleteDownloadRecords(
-    job.userId,
-    job.id,
-    accessToken
-  );
-
-  job.downloads = [];
-}
-
-/* =========================================================
-   CONFIGURAÇÃO DO UPLOAD
+   UPLOAD
 ========================================================= */
 
 const upload =
@@ -1166,7 +911,7 @@ function getCombinationFiles(
 }
 
 /* =========================================================
-   CRIA UM VÍDEO TEMPORÁRIO
+   CRIA UM VÍDEO TEMPORÁRIO SOB DEMANDA
 ========================================================= */
 
 async function createVideoForJob(
@@ -1406,12 +1151,6 @@ app.post(
 
       files: [],
 
-      /*
-        Lista dos vídeos que já foram enviados
-        para a Central de Downloads.
-      */
-      downloads: [],
-
       error:
         null,
 
@@ -1461,42 +1200,17 @@ app.post(
         job.current =
           "Preparando ganchos…";
 
-        for (
-          let i = 0;
-          i < hooks.length;
-          i++
-        ) {
-
-          const file =
-            hooks[i];
-
-          const output =
-            path.join(
-              dir,
-              `hook-${String(i + 1).padStart(3, "0")}.mp4`
-            );
-
-          await normalizeVideo(
-            file.path,
-            output,
-            dir
+        const hookResults =
+          await normalizeVideosWithConcurrency(
+            hooks,
+            "hook",
+            dir,
+            job
           );
 
-          normalizedHooks.push({
-            source:
-              file,
-
-            path:
-              output
-          });
-
-          await fsp.rm(
-            file.path,
-            {
-              force: true
-            }
-          );
-        }
+        normalizedHooks.push(
+          ...hookResults
+        );
 
         /* ================================================
            2. CORPOS
@@ -1505,42 +1219,17 @@ app.post(
         job.current =
           "Preparando corpos…";
 
-        for (
-          let i = 0;
-          i < bodies.length;
-          i++
-        ) {
-
-          const file =
-            bodies[i];
-
-          const output =
-            path.join(
-              dir,
-              `body-${String(i + 1).padStart(3, "0")}.mp4`
-            );
-
-          await normalizeVideo(
-            file.path,
-            output,
-            dir
+        const bodyResults =
+          await normalizeVideosWithConcurrency(
+            bodies,
+            "body",
+            dir,
+            job
           );
 
-          normalizedBodies.push({
-            source:
-              file,
-
-            path:
-              output
-          });
-
-          await fsp.rm(
-            file.path,
-            {
-              force: true
-            }
-          );
-        }
+        normalizedBodies.push(
+          ...bodyResults
+        );
 
         /* ================================================
            3. CTAs
@@ -1549,42 +1238,17 @@ app.post(
         job.current =
           "Preparando CTAs…";
 
-        for (
-          let i = 0;
-          i < ctas.length;
-          i++
-        ) {
-
-          const file =
-            ctas[i];
-
-          const output =
-            path.join(
-              dir,
-              `cta-${String(i + 1).padStart(3, "0")}.mp4`
-            );
-
-          await normalizeVideo(
-            file.path,
-            output,
-            dir
+        const ctaResults =
+          await normalizeVideosWithConcurrency(
+            ctas,
+            "cta",
+            dir,
+            job
           );
 
-          normalizedCtas.push({
-            source:
-              file,
-
-            path:
-              output
-          });
-
-          await fsp.rm(
-            file.path,
-            {
-              force: true
-            }
-          );
-        }
+        normalizedCtas.push(
+          ...ctaResults
+        );
 
         /* ================================================
            4. PREPARA AS COMBINAÇÕES
@@ -1703,7 +1367,7 @@ app.post(
                 );
 
               /* ==========================================
-                 SALVA OS DADOS DA COMBINAÇÃO
+                 SALVA SOMENTE OS DADOS
               ========================================== */
 
               job.files.push({
@@ -1739,6 +1403,9 @@ app.post(
 
                 originality
               });
+
+              job.done =
+                index;
             }
           }
         }
@@ -1752,139 +1419,8 @@ app.post(
             a.index - b.index
         );
 
-        /*
-          Até aqui só preparamos as combinações.
-          Agora começa a geração real dos vídeos.
-        */
-
-        job.done = 0;
-
         /* ================================================
-           6. GERA E ENVIA CADA VÍDEO PARA O STORAGE
-        ================================================ */
-
-        for (
-          let i = 0;
-          i < job.files.length;
-          i++
-        ) {
-
-          const file =
-            job.files[i];
-
-          const position =
-            i + 1;
-
-          job.current =
-            `Gerando vídeo ${position}/${total}…`;
-
-          /*
-            Gera somente UM MP4 final temporário.
-          */
-          const tempVideo =
-            await createVideoForJob(
-              job,
-              file
-            );
-
-          const storagePath =
-            getStoragePath(
-              job.userId,
-              job.id,
-              file.name
-            );
-
-          try {
-
-            job.current =
-              `Enviando vídeo ${position}/${total}…`;
-
-            /*
-              Envia o MP4 para o bucket privado.
-            */
-            await uploadVideoToStorage(
-              tempVideo,
-              storagePath,
-              req.accessToken
-            );
-
-            /*
-              Depois que o upload deu certo,
-              registra o vídeo na tabela downloads.
-            */
-            await registerDownload(
-              {
-                userId:
-                  job.userId,
-
-                jobId:
-                  job.id,
-
-                fileName:
-                  file.name,
-
-                storagePath,
-
-                originality:
-                  file.originality
-              },
-              req.accessToken
-            );
-
-            /*
-              Guarda em memória somente os dados necessários
-              para eventual limpeza caso o lote falhe.
-            */
-            job.downloads.push({
-              fileName:
-                file.name,
-
-              storagePath,
-
-              originality:
-                file.originality
-            });
-
-            /*
-              O vídeo foi realmente armazenado.
-            */
-            job.done =
-              position;
-
-            job.current =
-              `Vídeo ${position}/${total} concluído.`;
-
-          } catch (error) {
-
-            /*
-              Se o upload deu certo mas o registro
-              no banco falhou, tentamos remover o objeto.
-            */
-            await deleteVideoFromStorage(
-              storagePath,
-              req.accessToken
-            );
-
-            throw error;
-
-          } finally {
-
-            /*
-              Nunca mantemos os vídeos finais
-              dentro do /tmp.
-            */
-            await fsp.rm(
-              tempVideo,
-              {
-                force: true
-              }
-            );
-
-          }
-        }
-
-        /* ================================================
-           7. FINALIZADO
+           6. FINALIZADO
         ================================================ */
 
         job.current =
@@ -1896,10 +1432,6 @@ app.post(
         job.zip =
           `/api/jobs/${id}/zip`;
 
-        console.log(
-          `GeraMix: job ${id} concluído com ${job.total} vídeo(s) armazenado(s).`
-        );
-
       } catch (e) {
 
         console.error(
@@ -1908,18 +1440,11 @@ app.post(
         );
 
         /*
-          Se alguma etapa falhou, removemos os vídeos
-          que já chegaram ao Storage e seus registros.
+          A cota foi reservada antes da preparação.
+          Como este lote falhou antes de ser concluído,
+          devolvemos toda a quantidade reservada.
         */
-        await cleanupStoredDownloads(
-          job,
-          req.accessToken
-        );
 
-        /*
-          A cota foi reservada antes do processamento.
-          Como o lote não terminou, devolvemos toda a cota.
-        */
         await releaseVideoQuota(
           req.user.id,
           req.accessToken,
@@ -2110,46 +1635,30 @@ app.get(
 
         try {
 
-          const input =
-            fs.createReadStream(
-              tempVideo
-            );
-
-          input.on(
-            "error",
-            error => {
-              archive.emit(
-                "error",
-                error
-              );
-            }
-          );
-
-          archive.append(
-            input,
-            {
-              name:
-                file.name
-            }
-          );
-
-          /*
-            O stream é consumido pelo Archiver.
-            A remoção do arquivo é feita depois que
-            o stream terminar.
-          */
-
           await new Promise(
             (resolve, reject) => {
 
-              input.on(
-                "end",
-                resolve
-              );
+              const input =
+                fs.createReadStream(
+                  tempVideo
+                );
 
               input.on(
                 "error",
                 reject
+              );
+
+              input.on(
+                "close",
+                resolve
+              );
+
+              archive.append(
+                input,
+                {
+                  name:
+                    file.name
+                }
               );
 
             }
