@@ -391,6 +391,7 @@ button:disabled{
 }
 
 @media(max-width:480px){
+
   main{
     padding:20px 12px 50px;
   }
@@ -585,6 +586,7 @@ button:disabled{
 </main>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/tus-js-client@4/dist/tus.min.js"></script>
 
 <script>
 
@@ -606,6 +608,14 @@ let quotaLoaded = false;
 ========================================================= */
 
 let generationInProgress = false;
+
+
+/* =========================================================
+   STORAGE
+========================================================= */
+
+const DOWNLOADS_BUCKET =
+  "geramix-downloads";
 
 
 /* =========================================================
@@ -846,11 +856,6 @@ async function getAuthToken(
       await supabaseClient.auth.getSession();
 
     if(result.error){
-
-      console.error(
-        "Erro após renovação:",
-        result.error
-      );
 
       throw new Error(
         "Não foi possível recuperar sua sessão."
@@ -1117,7 +1122,7 @@ async function loadMonthlyQuota(){
 
 
 /* =========================================================
-   ATUALIZA CONTADOR COM RESPOSTA DO SERVIDOR
+   ATUALIZA CONTADOR
 ========================================================= */
 
 function updateQuotaDisplay(
@@ -1197,7 +1202,7 @@ function updateQuotaDisplay(
 
 
 /* =========================================================
-   VERIFICA SE O SALDO PERMITE A QUANTIDADE
+   VERIFICA COTA
 ========================================================= */
 
 function checkQuotaForGeneration(
@@ -1246,7 +1251,7 @@ function checkQuotaForGeneration(
 
 
 /* =========================================================
-   ATUALIZA ESTADO DO BOTÃO
+   BOTÃO
 ========================================================= */
 
 function updateGenerateButtonState(){
@@ -1555,7 +1560,298 @@ async function createAuthenticatedVideoUrl(
 
 
 /* =========================================================
-   SELETORES COM LIMITE CRAVADO
+   STORAGE — UPLOAD DIRETO
+========================================================= */
+
+function getSupabaseProjectRef(){
+
+  if(!supabaseClient){
+
+    throw new Error(
+      "Supabase ainda não foi inicializado."
+    );
+  }
+
+  return new URL(
+    supabaseClient.supabaseUrl
+  ).hostname.split(".")[0];
+}
+
+
+function sanitizeStorageFileName(
+  name
+){
+
+  return String(
+    name ||
+    "video.mp4"
+  )
+    .replace(
+      /[^a-zA-Z0-9._-]/g,
+      "_"
+    )
+    .slice(
+      -120
+    );
+}
+
+
+async function uploadSourceFile(
+  file,
+  category,
+  index,
+  batchId
+){
+
+  if(
+    typeof window.tus === "undefined"
+  ){
+
+    throw new Error(
+      "O sistema de upload ainda não carregou. Atualize a página e tente novamente."
+    );
+  }
+
+  const token =
+    await getAuthToken();
+
+  const userResult =
+    await supabaseClient.auth.getUser();
+
+  if(
+    userResult.error ||
+    !userResult.data?.user?.id
+  ){
+
+    throw new Error(
+      "Não foi possível identificar o usuário."
+    );
+  }
+
+  const userId =
+    userResult.data.user.id;
+
+  const projectRef =
+    getSupabaseProjectRef();
+
+  const safeFileName =
+    sanitizeStorageFileName(
+      file.name
+    );
+
+  const extension =
+    safeFileName.includes(".")
+      ? safeFileName.slice(
+          safeFileName.lastIndexOf(".")
+        )
+      : ".mp4";
+
+  const storagePath =
+    `${userId}/inputs/${batchId}/${category}-${index}${extension}`;
+
+  const endpoint =
+    `https://${projectRef}.storage.supabase.co/storage/v1/upload/resumable`;
+
+  $("status")
+    .textContent =
+    `Enviando ${category} ${index}…`;
+
+  return new Promise(
+    (
+      resolve,
+      reject
+    ) => {
+
+      const upload =
+        new tus.Upload(
+          file,
+          {
+            endpoint,
+
+            retryDelays:[
+              0,
+              3000,
+              5000,
+              10000,
+              20000
+            ],
+
+            headers:{
+              authorization:
+                `Bearer ${token}`,
+
+              apikey:
+                supabaseClient.supabaseKey
+            },
+
+            uploadDataDuringCreation:
+              true,
+
+            removeFingerprintOnSuccess:
+              true,
+
+            metadata:{
+              bucketName:
+                DOWNLOADS_BUCKET,
+
+              objectName:
+                storagePath,
+
+              contentType:
+                file.type ||
+                "video/mp4",
+
+              cacheControl:
+                "3600"
+            },
+
+            onError:
+              error => {
+
+                console.error(
+                  "Erro no upload:",
+                  error
+                );
+
+                reject(
+                  new Error(
+                    `Erro ao enviar ${file.name}: ${error?.message || "falha no upload"}`
+                  )
+                );
+              },
+
+            onProgress:
+              (
+                bytesUploaded,
+                bytesTotal
+              ) => {
+
+                const percentage =
+                  bytesTotal
+                    ? Math.round(
+                        bytesUploaded /
+                        bytesTotal *
+                        100
+                      )
+                    : 0;
+
+                $("status")
+                  .textContent =
+                  `Enviando ${category} ${index}: ${percentage}%`;
+              },
+
+            onSuccess:
+              () => {
+
+                resolve({
+                  storagePath,
+
+                  originalName:
+                    file.name
+                });
+              }
+          }
+        );
+
+      upload
+        .findPreviousUploads()
+        .then(
+          previousUploads => {
+
+            if(
+              previousUploads.length
+            ){
+
+              upload.resumeFromPreviousUpload(
+                previousUploads[0]
+              );
+            }
+
+            upload.start();
+          }
+        )
+        .catch(
+          error => {
+
+            reject(
+              new Error(
+                `Não foi possível iniciar o upload de ${file.name}: ${error?.message || "erro desconhecido"}`
+              )
+            );
+          }
+        );
+    }
+  );
+}
+
+
+async function uploadCategory(
+  files,
+  category,
+  batchId
+){
+
+  const uploaded = [];
+
+  for(
+    let i = 0;
+    i < files.length;
+    i++
+  ){
+
+    const result =
+      await uploadSourceFile(
+        files[i],
+        category,
+        i + 1,
+        batchId
+      );
+
+    uploaded.push(
+      result
+    );
+  }
+
+  return uploaded;
+}
+
+
+async function deleteUploadedInputs(
+  paths
+){
+
+  if(
+    !paths ||
+    !paths.length ||
+    !supabaseClient
+  ){
+
+    return;
+  }
+
+  try{
+
+    await supabaseClient
+      .storage
+      .from(
+        DOWNLOADS_BUCKET
+      )
+      .remove(
+        paths
+      );
+
+  }catch(error){
+
+    console.error(
+      "Erro ao limpar uploads temporários:",
+      error
+    );
+  }
+}
+
+
+/* =========================================================
+   SELETORES
 ========================================================= */
 
 setup(
@@ -1634,10 +1930,6 @@ $("go").onclick =
       return;
     }
 
-    /* =====================================================
-       VERIFICA COTA ANTES DE ENVIAR OS ARQUIVOS
-    ===================================================== */
-
     const quotaCheck =
       checkQuotaForGeneration(
         total
@@ -1654,33 +1946,6 @@ $("go").onclick =
       return;
     }
 
-    const fd =
-      new FormData();
-
-    D.h.forEach(
-      f =>
-        fd.append(
-          "hooks",
-          f
-        )
-    );
-
-    D.b.forEach(
-      f =>
-        fd.append(
-          "bodies",
-          f
-        )
-    );
-
-    D.c.forEach(
-      f =>
-        fd.append(
-          "ctas",
-          f
-        )
-    );
-
     generationInProgress =
       true;
 
@@ -1691,10 +1956,12 @@ $("go").onclick =
       "none";
 
     $("result")
-      .innerHTML = "";
+      .innerHTML =
+      "";
 
     $("originalitySummary")
-      .innerHTML = "";
+      .innerHTML =
+      "";
 
     $("bar")
       .style.width =
@@ -1702,36 +1969,123 @@ $("go").onclick =
 
     $("status")
       .textContent =
-      "Verificando sessão…";
+      "Preparando envio…";
+
+    let uploadedPaths = [];
 
     try{
 
-      let headers =
-        await authHeaders(
-          false
+      /*
+        Cria um lote único para os arquivos temporários.
+      */
+
+      const batchId =
+        crypto.randomUUID();
+
+      /*
+        ENVIA DIRETAMENTE AO SUPABASE.
+        A Vercel NÃO recebe os arquivos.
+      */
+
+      $("status")
+        .textContent =
+        "Enviando ganchos…";
+
+      const hooks =
+        await uploadCategory(
+          D.h,
+          "hook",
+          batchId
+        );
+
+      uploadedPaths =
+        uploadedPaths.concat(
+          hooks.map(
+            item =>
+              item.storagePath
+          )
         );
 
       $("status")
         .textContent =
-        "Enviando vídeos…";
+        "Enviando corpos…";
 
-      let r =
+      const bodies =
+        await uploadCategory(
+          D.b,
+          "body",
+          batchId
+        );
+
+      uploadedPaths =
+        uploadedPaths.concat(
+          bodies.map(
+            item =>
+              item.storagePath
+          )
+        );
+
+      $("status")
+        .textContent =
+        "Enviando CTAs…";
+
+      const ctas =
+        await uploadCategory(
+          D.c,
+          "cta",
+          batchId
+        );
+
+      uploadedPaths =
+        uploadedPaths.concat(
+          ctas.map(
+            item =>
+              item.storagePath
+          )
+        );
+
+      /*
+        Agora somente um JSON pequeno vai para a Vercel.
+      */
+
+      $("status")
+        .textContent =
+        "Iniciando geração…";
+
+      let headers =
+        await authHeaders();
+
+      let response =
         await fetch(
           "/api/jobs",
           {
             method:"POST",
-            headers,
-            body:fd
+
+            headers:{
+              ...headers,
+
+              "Content-Type":
+                "application/json"
+            },
+
+            body:
+              JSON.stringify({
+
+                inputs:{
+                  hooks,
+
+                  bodies,
+
+                  ctas
+                }
+
+              })
           }
         );
 
       if(
-        r.status === 401
+        response.status === 401
       ){
-
-        $("status")
-          .textContent =
-          "Renovando sessão…";
 
         const refreshed =
           await refreshAuthSession();
@@ -1746,81 +2100,103 @@ $("go").onclick =
         }
 
         headers =
-          await authHeaders(
-            false
-          );
+          await authHeaders();
 
-        r =
+        response =
           await fetch(
             "/api/jobs",
             {
               method:"POST",
-              headers,
-              body:fd
+
+              headers:{
+                ...headers,
+
+                "Content-Type":
+                  "application/json"
+              },
+
+              body:
+                JSON.stringify({
+
+                  inputs:{
+                    hooks,
+
+                    bodies,
+
+                    ctas
+                  }
+
+                })
             }
           );
       }
 
-      let j;
+      let job;
 
       try{
 
-        j =
-          await r.json();
+        job =
+          await response.json();
 
-      }catch(error){
+      }catch{
 
         throw new Error(
-          `Resposta inválida do servidor. Código: ${r.status}`
+          `Resposta inválida do servidor. Código: ${response.status}`
         );
       }
 
-      /* ===================================================
-         ATUALIZA A COTA REAL DEVOLVIDA PELO SERVIDOR
-      =================================================== */
-
       if(
-        j.videosUsed !== undefined &&
-        j.monthlyLimit !== undefined
+        job.videosUsed !== undefined &&
+        job.monthlyLimit !== undefined
       ){
 
         updateQuotaDisplay(
-          j.videosUsed,
-          j.monthlyLimit
+          job.videosUsed,
+          job.monthlyLimit
         );
       }
 
       if(
-        !r.ok
+        !response.ok
       ){
 
         throw new Error(
-          j.error ||
-          `Falha no envio. Código: ${r.status}`
+          job.error ||
+          `Falha ao iniciar geração. Código: ${response.status}`
         );
       }
+
+      /*
+        O servidor recebeu somente os caminhos dos
+        arquivos. Os arquivos grandes continuam no Storage.
+      */
+
+      $("status")
+        .textContent =
+        "Vídeos enviados. Processando…";
 
       const poll =
         async () => {
 
           try{
 
-            let headers =
+            let pollHeaders =
               await authHeaders();
 
-            let response =
+            let pollResponse =
               await fetch(
                 "/api/jobs/" +
                 encodeURIComponent(
-                  j.id
+                  job.id
                 ),
                 {
-                  headers
+                  headers:
+                    pollHeaders
                 }
               );
 
             if(
-              response.status === 401
+              pollResponse.status === 401
             ){
 
               const refreshed =
@@ -1835,17 +2211,18 @@ $("go").onclick =
                 );
               }
 
-              headers =
+              pollHeaders =
                 await authHeaders();
 
-              response =
+              pollResponse =
                 await fetch(
                   "/api/jobs/" +
                   encodeURIComponent(
-                    j.id
+                    job.id
                   ),
                   {
-                    headers
+                    headers:
+                      pollHeaders
                   }
                 );
             }
@@ -1855,22 +2232,22 @@ $("go").onclick =
             try{
 
               x =
-                await response.json();
+                await pollResponse.json();
 
-            }catch(error){
+            }catch{
 
               throw new Error(
-                `Resposta inválida do servidor. Código: ${response.status}`
+                `Resposta inválida do servidor. Código: ${pollResponse.status}`
               );
             }
 
             if(
-              !response.ok
+              !pollResponse.ok
             ){
 
               throw new Error(
                 x.error ||
-                `Falha ao consultar processamento. Código: ${response.status}`
+                `Falha ao consultar processamento. Código: ${pollResponse.status}`
               );
             }
 
@@ -1910,7 +2287,7 @@ $("go").onclick =
 
                 const videoUrl =
                   await createAuthenticatedVideoUrl(
-                    j.id,
+                    job.id,
                     f.name
                   );
 
@@ -2072,6 +2449,15 @@ $("go").onclick =
         error
       );
 
+      /*
+        Se algum upload já aconteceu e a criação do job
+        falhar, apaga os arquivos temporários.
+      */
+
+      await deleteUploadedInputs(
+        uploadedPaths
+      );
+
       $("status")
         .textContent =
         "Erro: " +
@@ -2086,6 +2472,7 @@ $("go").onclick =
 
       updateGenerateButtonState();
     }
+
   };
 
 
@@ -2105,8 +2492,6 @@ $("go").onclick =
     $("status")
       .textContent =
       "Pronto.";
-
-    /* Carrega o uso mensal */
 
     await loadMonthlyQuota();
 
