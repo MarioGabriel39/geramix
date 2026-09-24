@@ -7,8 +7,6 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
-  
-</script>
   <style>
     body {
       margin: 0;
@@ -85,7 +83,7 @@
   <script>
     const SUPABASE_URL = 'https://xbhztvjdzqpsdjtwmpys.supabase.co';
 
-    const SUPABASE_ANON_KEY = 'sb_publishable_1QZy7zvLfCrUjSS2fZGWaQ_8svC39fb';
+    const SUPABASE_ANON_KEY = 'SUA_PUBLISHABLE_KEY_AQUI';
 
     const supabaseClient = window.supabase.createClient(
       SUPABASE_URL,
@@ -94,7 +92,6 @@
 
     document.querySelector('form').addEventListener('submit', async (e) => {
       e.preventDefault();
-      
 
       const email = document.querySelector('input[type="email"]').value;
       const senha = document.querySelector('input[type="password"]').value;
@@ -109,7 +106,7 @@
         return;
       }
 
-      window.location.href = '/';
+      window.location.href = '/dashboard.html';
     });
   </script>
 
