@@ -15,15 +15,17 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const ROOT = process.cwd();
 const PUBLIC = path.join(ROOT, "public");
-
 const BASE = path.join(os.tmpdir(), "geramix");
 const UPLOADS = path.join(BASE, "uploads");
 const JOBS = path.join(BASE, "jobs");
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY;
-
 const SUPABASE_DOWNLOAD_BUCKET = "geramix-downloads";
+
+const MAX_COMBINATIONS = 150;
+const FFMPEG_CONCURRENCY = 1;
+const DOWNLOAD_RETENTION_DAYS = 7;
 
 if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
   throw new Error(
@@ -31,38 +33,24 @@ if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
   );
 }
 
-const MAX_HOOKS = 5;
-const MAX_BODIES = 5;
-const MAX_CTAS = 6;
-const MAX_COMBINATIONS = 150;
-const FFMPEG_CONCURRENCY = 1;
-
 await Promise.all([
   fsp.mkdir(UPLOADS, { recursive: true }),
   fsp.mkdir(JOBS, { recursive: true })
 ]);
 
 /* =========================================================
-   ARQUIVOS PÚBLICOS
+   EXPRESS
 ========================================================= */
 
+app.use(express.json({ limit: "1mb" }));
+app.use(express.urlencoded({ extended: true, limit: "1mb" }));
 app.use(express.static(PUBLIC));
-
-/*
-  O index.html novo envia JSON pequeno.
-  Os vídeos grandes vão diretamente para o Supabase Storage.
-*/
-app.use(
-  express.json({
-    limit: "1mb"
-  })
-);
 
 /* =========================================================
    CONFIGURAÇÃO DO FRONT-END
 ========================================================= */
 
-app.get("/api/config", (_, res) => {
+app.get("/api/config", (_req, res) => {
   res.setHeader("Cache-Control", "no-store");
 
   res.json({
@@ -97,9 +85,6 @@ async function requireAuth(req, res, next) {
       });
     }
 
-    /*
-      Publishable Key não é token de sessão.
-    */
     if (token.startsWith("sb_")) {
       return res.status(401).json({
         error: "Token de usuário inválido."
@@ -110,6 +95,7 @@ async function requireAuth(req, res, next) {
       `${SUPABASE_URL}/auth/v1/user`,
       {
         method: "GET",
+
         headers: {
           Authorization: `Bearer ${token}`,
           apikey: SUPABASE_ANON_KEY
@@ -118,27 +104,6 @@ async function requireAuth(req, res, next) {
     );
 
     if (!response.ok) {
-      let details = "";
-
-      try {
-        const data = await response.json();
-
-        details =
-          data?.msg ||
-          data?.message ||
-          data?.error_description ||
-          data?.error ||
-          "";
-      } catch {
-        details = "";
-      }
-
-      console.error(
-        "GeraMix: Supabase recusou o token.",
-        response.status,
-        details
-      );
-
       return res.status(401).json({
         error: "Sessão inválida ou expirada."
       });
@@ -158,7 +123,7 @@ async function requireAuth(req, res, next) {
     next();
   } catch (error) {
     console.error(
-      "Erro ao validar sessão:",
+      "GeraMix: erro ao validar sessão:",
       error
     );
 
@@ -181,11 +146,13 @@ async function reserveVideoQuota(
     `${SUPABASE_URL}/rest/v1/rpc/reserve_video_quota`,
     {
       method: "POST",
+
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${accessToken}`,
         apikey: SUPABASE_ANON_KEY
       },
+
       body: JSON.stringify({
         p_user_id: userId,
         p_amount: amount
@@ -194,27 +161,6 @@ async function reserveVideoQuota(
   );
 
   if (!response.ok) {
-    let details = "";
-
-    try {
-      const data = await response.json();
-
-      details =
-        data?.message ||
-        data?.msg ||
-        data?.error_description ||
-        data?.error ||
-        "";
-    } catch {
-      details = "";
-    }
-
-    console.error(
-      "GeraMix: erro ao reservar cota.",
-      response.status,
-      details
-    );
-
     throw new Error(
       "Não foi possível verificar sua cota mensal."
     );
@@ -222,9 +168,10 @@ async function reserveVideoQuota(
 
   const data = await response.json();
 
-  const result = Array.isArray(data)
-    ? data[0]
-    : data;
+  const result =
+    Array.isArray(data)
+      ? data[0]
+      : data;
 
   if (!result) {
     throw new Error(
@@ -233,10 +180,17 @@ async function reserveVideoQuota(
   }
 
   return {
-    allowed: Boolean(result.allowed),
-    videosUsed: Number(result.videos_used || 0),
-    monthlyLimit: Number(result.monthly_limit || 0),
-    message: result.message || ""
+    allowed:
+      Boolean(result.allowed),
+
+    videosUsed:
+      Number(result.videos_used || 0),
+
+    monthlyLimit:
+      Number(result.monthly_limit || 0),
+
+    message:
+      result.message || ""
   };
 }
 
@@ -254,11 +208,13 @@ async function releaseVideoQuota(
       `${SUPABASE_URL}/rest/v1/rpc/release_video_quota`,
       {
         method: "POST",
+
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${accessToken}`,
           apikey: SUPABASE_ANON_KEY
         },
+
         body: JSON.stringify({
           p_user_id: userId,
           p_amount: amount
@@ -267,33 +223,11 @@ async function releaseVideoQuota(
     );
 
     if (!response.ok) {
-      let details = "";
-
-      try {
-        const data = await response.json();
-
-        details =
-          data?.message ||
-          data?.msg ||
-          data?.error_description ||
-          data?.error ||
-          "";
-      } catch {
-        details = "";
-      }
-
       console.error(
-        "GeraMix: não foi possível devolver a cota.",
-        response.status,
-        details
+        "GeraMix: não foi possível devolver a cota:",
+        response.status
       );
-
-      return;
     }
-
-    console.log(
-      `GeraMix: ${amount} vídeo(s) devolvido(s) para a cota.`
-    );
   } catch (error) {
     console.error(
       "GeraMix: erro ao devolver cota:",
@@ -306,7 +240,7 @@ async function releaseVideoQuota(
    HEALTH
 ========================================================= */
 
-app.get("/health", (_, res) => {
+app.get("/health", (_req, res) => {
   res.json({
     ok: true,
     service: "geramix",
@@ -319,66 +253,84 @@ app.get("/health", (_, res) => {
 ========================================================= */
 
 function runFFmpeg(args, cwd) {
-  return new Promise((resolve, reject) => {
-    const process = spawn(
-      ffmpegPath,
-      [
-        "-hide_banner",
-        "-loglevel",
-        "error",
-        "-threads",
-        "1",
-        ...args
-      ],
-      {
-        cwd
-      }
-    );
-
-    let errorText = "";
-
-    process.stderr.on("data", data => {
-      errorText += data.toString();
-
-      if (errorText.length > 10000) {
-        errorText = errorText.slice(-10000);
-      }
-    });
-
-    process.on("error", reject);
-
-    process.on("close", code => {
-      if (code === 0) {
-        resolve();
-        return;
-      }
-
-      reject(
-        new Error(
-          errorText.trim() ||
-          `FFmpeg saiu com código ${code}.`
-        )
+  return new Promise(
+    (resolve, reject) => {
+      const process = spawn(
+        ffmpegPath,
+        [
+          "-hide_banner",
+          "-loglevel",
+          "error",
+          "-threads",
+          "1",
+          ...args
+        ],
+        {
+          cwd
+        }
       );
-    });
-  });
+
+      let stderr = "";
+
+      process.stderr.on(
+        "data",
+        data => {
+          stderr += data.toString();
+
+          if (stderr.length > 12000) {
+            stderr =
+              stderr.slice(-12000);
+          }
+        }
+      );
+
+      process.on(
+        "error",
+        reject
+      );
+
+      process.on(
+        "close",
+        code => {
+          if (code === 0) {
+            return resolve();
+          }
+
+          reject(
+            new Error(
+              stderr.trim() ||
+              `FFmpeg saiu com código ${code}`
+            )
+          );
+        }
+      );
+    }
+  );
 }
 
 /* =========================================================
    VERIFICA ÁUDIO
 ========================================================= */
 
-async function hasAudio(input, cwd) {
+async function hasAudio(
+  input,
+  cwd
+) {
   try {
     await runFFmpeg(
       [
         "-i",
         input,
+
         "-map",
         "0:a:0",
+
         "-frames:a",
         "0",
+
         "-f",
         "null",
+
         "-"
       ],
       cwd
@@ -399,10 +351,11 @@ async function normalizeVideo(
   output,
   cwd
 ) {
-  const audio = await hasAudio(
-    input,
-    cwd
-  );
+  const audio =
+    await hasAudio(
+      input,
+      cwd
+    );
 
   const args = [
     "-i",
@@ -413,6 +366,7 @@ async function normalizeVideo(
     args.push(
       "-f",
       "lavfi",
+
       "-i",
       "anullsrc=r=48000:cl=stereo"
     );
@@ -428,11 +382,7 @@ async function normalizeVideo(
       : "1:a:0",
 
     "-vf",
-    "scale=720:1280:force_original_aspect_ratio=decrease," +
-      "pad=720:1280:(ow-iw)/2:(oh-ih)/2," +
-      "setsar=1," +
-      "fps=30," +
-      "format=yuv420p",
+    "scale=720:1280:force_original_aspect_ratio=decrease,pad=720:1280:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=30,format=yuv420p",
 
     "-c:v",
     "libx264",
@@ -463,6 +413,9 @@ async function normalizeVideo(
 
     "-shortest",
 
+    "-movflags",
+    "+faststart",
+
     "-y",
     output
   );
@@ -474,7 +427,7 @@ async function normalizeVideo(
 }
 
 /* =========================================================
-   CONCATENA OS 3 VÍDEOS
+   CONCATENA VÍDEOS NORMALIZADOS
 ========================================================= */
 
 async function concatNormalized(
@@ -482,20 +435,19 @@ async function concatNormalized(
   output,
   cwd
 ) {
-  const listFile = path.join(
-    cwd,
-    `concat-${crypto.randomUUID()}.txt`
-  );
+  const listFile =
+    path.join(
+      cwd,
+      `concat-${crypto.randomUUID()}.txt`
+    );
 
-  const content = files
-    .map(file => {
-      const base = path
-        .basename(file)
-        .replace(/'/g, "'\\''");
-
-      return `file '${base}'`;
-    })
-    .join("\n");
+  const content =
+    files
+      .map(
+        file =>
+          `file '${path.basename(file).replace(/'/g, "'\\''")}'`
+      )
+      .join("\n");
 
   await fsp.writeFile(
     listFile,
@@ -508,12 +460,19 @@ async function concatNormalized(
       [
         "-f",
         "concat",
+
         "-safe",
         "0",
+
         "-i",
         listFile,
+
         "-c",
         "copy",
+
+        "-movflags",
+        "+faststart",
+
         "-y",
         output
       ],
@@ -530,18 +489,32 @@ async function concatNormalized(
 }
 
 /* =========================================================
-   NOME SEGURO
+   UTILITÁRIOS
 ========================================================= */
 
 function safeName(name) {
-  return String(name || "video")
-    .replace(/[^a-zA-Z0-9._-]/g, "_")
+  return String(
+    name || "video"
+  )
+    .replace(
+      /[^a-zA-Z0-9._-]/g,
+      "_"
+    )
     .slice(-100);
 }
 
-/* =========================================================
-   ORIGINALIDADE
-========================================================= */
+function encodeStoragePath(
+  storagePath
+) {
+  return String(
+    storagePath
+  )
+    .split("/")
+    .map(
+      encodeURIComponent
+    )
+    .join("/");
+}
 
 function calculateOriginality(
   current,
@@ -574,369 +547,102 @@ function calculateOriginality(
     different++;
   }
 
-  return 70 + different * 10;
+  return 70 +
+    different * 10;
 }
 
 /* =========================================================
-   MULTER
-   Mantido para compatibilidade.
+   STORAGE — BUSCAR OBJETO
 ========================================================= */
 
-const upload = multer({
-  dest: UPLOADS,
-
-  limits: {
-    files: 30,
-    fileSize: 200 * 1024 * 1024
-  }
-});
-
-/* =========================================================
-   JOBS
-========================================================= */
-
-const jobs = new Map();
-
-/* =========================================================
-   STORAGE — DOWNLOAD DE ENTRADA
-========================================================= */
-
-/*
-  O index.html envia somente o caminho do objeto.
-  O servidor baixa o vídeo privado temporariamente
-  para o /tmp e depois processa normalmente.
-*/
-
-function validateInputStoragePath(
+async function fetchStorageObject(
   storagePath,
-  userId
+  accessToken,
+  range = null
 ) {
-  if (
-    typeof storagePath !== "string" ||
-    !storagePath.trim()
-  ) {
-    throw new Error(
-      "Caminho de vídeo inválido."
-    );
+  const headers = {
+    Authorization:
+      `Bearer ${accessToken}`,
+
+    apikey:
+      SUPABASE_ANON_KEY
+  };
+
+  if (range) {
+    headers.Range =
+      range;
   }
 
-  const normalized = storagePath
-    .replace(/\\/g, "/")
-    .replace(/^\/+/, "");
-
-  const prefix =
-    `${userId}/inputs/`;
-
-  if (!normalized.startsWith(prefix)) {
-    throw new Error(
-      "O vídeo enviado não pertence ao usuário."
-    );
-  }
-
-  if (
-    normalized.includes("..") ||
-    normalized.includes("//")
-  ) {
-    throw new Error(
-      "Caminho de vídeo inválido."
-    );
-  }
-
-  return normalized;
-}
-
-async function downloadInputFromStorage(
-  storagePath,
-  destination,
-  accessToken
-) {
-  const encodedPath = storagePath
-    .split("/")
-    .map(encodeURIComponent)
-    .join("/");
-
-  const response = await fetch(
-    `${SUPABASE_URL}/storage/v1/object/${SUPABASE_DOWNLOAD_BUCKET}/${encodedPath}`,
+  return fetch(
+    `${SUPABASE_URL}/storage/v1/object/${SUPABASE_DOWNLOAD_BUCKET}/${encodeStoragePath(storagePath)}`,
     {
       method: "GET",
-      headers: {
-        Authorization:
-          `Bearer ${accessToken}`,
-
-        apikey:
-          SUPABASE_ANON_KEY
-      }
+      headers
     }
   );
+}
 
-  if (!response.ok) {
-    let details = "";
+/* =========================================================
+   BAIXAR OBJETO DO STORAGE PARA /TMP
+========================================================= */
 
-    try {
-      const data =
-        await response.json();
+async function downloadStorageObjectToFile(
+  storagePath,
+  accessToken,
+  localPath
+) {
+  const response =
+    await fetchStorageObject(
+      storagePath,
+      accessToken
+    );
 
-      details =
-        data?.message ||
-        data?.error ||
-        data?.error_description ||
-        "";
-    } catch {
-      details = "";
-    }
-
+  if (
+    !response.ok ||
+    !response.body
+  ) {
     throw new Error(
-      details ||
-      `Não foi possível baixar o vídeo do Storage (${response.status}).`
+      `Não foi possível baixar o vídeo de origem do Storage (${response.status}).`
     );
   }
 
-  if (!response.body) {
-    throw new Error(
-      "O Storage não enviou o arquivo."
-    );
-  }
-
-  const fileStream =
+  const file =
     fs.createWriteStream(
-      destination
+      localPath
     );
 
   try {
-    const readable =
-      Readable.fromWeb(
-        response.body
-      );
-
     await new Promise(
-      (resolve, reject) => {
-        readable.on(
+      (
+        resolve,
+        reject
+      ) => {
+        const stream =
+          Readable.fromWeb(
+            response.body
+          );
+
+        stream.on(
           "error",
           reject
         );
 
-        fileStream.on(
+        file.on(
           "error",
           reject
         );
 
-        fileStream.on(
+        file.on(
           "finish",
           resolve
         );
 
-        readable.pipe(
-          fileStream
-        );
+        stream.pipe(file);
       }
     );
   } catch (error) {
-    fileStream.destroy();
-
     await fsp.rm(
-      destination,
-      {
-        force: true
-      }
-    ).catch(() => {});
-
-    throw error;
-  }
-}
-
-/* =========================================================
-   STORAGE — EXCLUIR OBJETO
-========================================================= */
-
-async function deleteStorageObject(
-  storagePath,
-  accessToken
-) {
-  const encodedPath =
-    storagePath
-      .split("/")
-      .map(encodeURIComponent)
-      .join("/");
-
-  const response = await fetch(
-    `${SUPABASE_URL}/storage/v1/object/${SUPABASE_DOWNLOAD_BUCKET}/${encodedPath}`,
-    {
-      method: "DELETE",
-
-      headers: {
-        Authorization:
-          `Bearer ${accessToken}`,
-
-        apikey:
-          SUPABASE_ANON_KEY
-      }
-    }
-  );
-
-  if (!response.ok) {
-    throw new Error(
-      `Supabase não conseguiu excluir o arquivo (${response.status}).`
-    );
-  }
-}
-
-/* =========================================================
-   CONVERTE INPUTS DO JSON EM ARQUIVOS LOCAIS
-========================================================= */
-
-async function materializeInputCategory(
-  category,
-  items,
-  userId,
-  accessToken,
-  jobDir
-) {
-  if (!Array.isArray(items)) {
-    throw new Error(
-      `Categoria ${category} inválida.`
-    );
-  }
-
-  const result = [];
-
-  for (
-    let index = 0;
-    index < items.length;
-    index++
-  ) {
-    const item = items[index];
-
-    const storagePath =
-      validateInputStoragePath(
-        item?.storagePath,
-        userId
-      );
-
-    const originalName =
-      safeName(
-        item?.originalName ||
-        `${category}-${index + 1}.mp4`
-      );
-
-    const localPath =
-      path.join(
-        jobDir,
-        `input-${category}-${String(index + 1).padStart(3, "0")}.mp4`
-      );
-
-    await downloadInputFromStorage(
-      storagePath,
       localPath,
-      accessToken
-    );
-
-    /*
-      O arquivo original já está salvo localmente.
-      Podemos apagar a cópia de entrada do Storage.
-      Os vídeos finais ficam em outro caminho.
-    */
-    try {
-      await deleteStorageObject(
-        storagePath,
-        accessToken
-      );
-    } catch (error) {
-      /*
-        Não derruba o processamento caso a limpeza
-        da entrada falhe.
-      */
-      console.error(
-        `GeraMix: não foi possível remover entrada ${storagePath}:`,
-        error
-      );
-    }
-
-    result.push({
-      fieldname: category,
-      originalname: originalName,
-      encoding: "7bit",
-      mimetype:
-        item?.mimeType ||
-        "video/mp4",
-      destination: jobDir,
-      filename:
-        path.basename(localPath),
-      path: localPath
-    });
-  }
-
-  return result;
-}
-
-/* =========================================================
-   ARQUIVOS DE COMBINAÇÃO
-========================================================= */
-
-function getCombinationFiles(
-  job,
-  file
-) {
-  const dir =
-    path.join(
-      JOBS,
-      job.id
-    );
-
-  return [
-    path.join(
-      dir,
-      `hook-${String(file.hookIndex).padStart(3, "0")}.mp4`
-    ),
-
-    path.join(
-      dir,
-      `body-${String(file.bodyIndex).padStart(3, "0")}.mp4`
-    ),
-
-    path.join(
-      dir,
-      `cta-${String(file.ctaIndex).padStart(3, "0")}.mp4`
-    )
-  ];
-}
-
-/* =========================================================
-   CRIA VÍDEO FINAL TEMPORÁRIO
-========================================================= */
-
-async function createVideoForJob(
-  job,
-  file
-) {
-  const dir =
-    path.join(
-      JOBS,
-      job.id
-    );
-
-  const output =
-    path.join(
-      dir,
-      `temp-${crypto.randomUUID()}.mp4`
-    );
-
-  const sources =
-    getCombinationFiles(
-      job,
-      file
-    );
-
-  try {
-    await concatNormalized(
-      sources,
-      output,
-      dir
-    );
-
-    return output;
-  } catch (error) {
-    await fsp.rm(
-      output,
       {
         force: true
       }
@@ -947,20 +653,8 @@ async function createVideoForJob(
 }
 
 /* =========================================================
-   CENTRAL DE DOWNLOADS — STORAGE
+   ENVIAR VÍDEO PARA STORAGE
 ========================================================= */
-
-function getDownloadStoragePath(
-  userId,
-  jobId,
-  fileName
-) {
-  return [
-    userId,
-    jobId,
-    safeName(fileName)
-  ].join("/");
-}
 
 async function uploadVideoToStorage(
   localPath,
@@ -977,18 +671,13 @@ async function uploadVideoToStorage(
       localPath
     );
 
-  const encodedPath =
-    storagePath
-      .split("/")
-      .map(encodeURIComponent)
-      .join("/");
-
   try {
     const response =
       await fetch(
-        `${SUPABASE_URL}/storage/v1/object/${SUPABASE_DOWNLOAD_BUCKET}/${encodedPath}`,
+        `${SUPABASE_URL}/storage/v1/object/${SUPABASE_DOWNLOAD_BUCKET}/${encodeStoragePath(storagePath)}`,
         {
-          method: "POST",
+          method:
+            "POST",
 
           headers: {
             Authorization:
@@ -1007,42 +696,99 @@ async function uploadVideoToStorage(
               "false"
           },
 
-          body: stream,
+          body:
+            stream,
 
-          duplex: "half"
+          duplex:
+            "half"
         }
       );
 
     if (!response.ok) {
-      let details = "";
-
-      try {
-        const data =
-          await response.json();
-
-        details =
-          data?.message ||
-          data?.error ||
-          data?.error_description ||
-          "";
-      } catch {
-        details = "";
-      }
-
       throw new Error(
-        details ||
         `Supabase Storage recusou o vídeo (${response.status}).`
       );
     }
 
     return {
       storagePath,
-      size: stat.size
+      size:
+        stat.size
     };
   } finally {
     stream.destroy();
   }
 }
+
+/* =========================================================
+   EXCLUIR OBJETO DO STORAGE
+========================================================= */
+
+async function deleteStorageObject(
+  storagePath,
+  accessToken
+) {
+  const response =
+    await fetch(
+      `${SUPABASE_URL}/storage/v1/object/${SUPABASE_DOWNLOAD_BUCKET}/${encodeStoragePath(storagePath)}`,
+      {
+        method:
+          "DELETE",
+
+        headers: {
+          Authorization:
+            `Bearer ${accessToken}`,
+
+          apikey:
+            SUPABASE_ANON_KEY
+        }
+      }
+    );
+
+  if (
+    !response.ok &&
+    response.status !== 404
+  ) {
+    throw new Error(
+      `Supabase não conseguiu excluir o arquivo (${response.status}).`
+    );
+  }
+}
+
+/* =========================================================
+   EXCLUIR VÁRIOS OBJETOS
+========================================================= */
+
+async function deleteStorageObjectsBestEffort(
+  paths,
+  accessToken
+) {
+  for (
+    const storagePath of
+    paths || []
+  ) {
+    if (!storagePath) {
+      continue;
+    }
+
+    try {
+      await deleteStorageObject(
+        storagePath,
+        accessToken
+      );
+    } catch (error) {
+      console.error(
+        "GeraMix: falha ao excluir objeto do Storage:",
+        storagePath,
+        error
+      );
+    }
+  }
+}
+
+/* =========================================================
+   REGISTRAR DOWNLOAD
+========================================================= */
 
 async function registerDownload({
   userId,
@@ -1056,7 +802,8 @@ async function registerDownload({
     await fetch(
       `${SUPABASE_URL}/rest/v1/downloads`,
       {
-        method: "POST",
+        method:
+          "POST",
 
         headers: {
           "Content-Type":
@@ -1097,28 +844,837 @@ async function registerDownload({
     );
 
   if (!response.ok) {
-    let details = "";
-
-    try {
-      const data =
-        await response.json();
-
-      details =
-        data?.message ||
-        data?.msg ||
-        data?.error_description ||
-        data?.error ||
-        "";
-    } catch {
-      details = "";
-    }
-
     throw new Error(
-      details ||
       `Supabase não conseguiu registrar o download (${response.status}).`
     );
   }
 }
+
+/* =========================================================
+   EXCLUIR REGISTRO DE DOWNLOAD
+========================================================= */
+
+async function deleteDownloadRecord(
+  id,
+  accessToken
+) {
+  const response =
+    await fetch(
+      `${SUPABASE_URL}/rest/v1/downloads?id=eq.${encodeURIComponent(id)}`,
+      {
+        method:
+          "DELETE",
+
+        headers: {
+          Authorization:
+            `Bearer ${accessToken}`,
+
+          apikey:
+            SUPABASE_ANON_KEY
+        }
+      }
+    );
+
+  if (!response.ok) {
+    throw new Error(
+      `Supabase não conseguiu excluir o registro (${response.status}).`
+    );
+  }
+}
+
+/* =========================================================
+   LIMPEZA DE DOWNLOADS EXPIRADOS
+========================================================= */
+
+async function cleanupExpiredDownloads(
+  userId,
+  accessToken
+) {
+  const response =
+    await fetch(
+      `${SUPABASE_URL}/rest/v1/downloads?user_id=eq.${encodeURIComponent(userId)}&expires_at=lt.${encodeURIComponent(new Date().toISOString())}&select=id,storage_path`,
+      {
+        method:
+          "GET",
+
+        headers: {
+          Authorization:
+            `Bearer ${accessToken}`,
+
+          apikey:
+            SUPABASE_ANON_KEY
+        }
+      }
+    );
+
+  if (!response.ok) {
+    return;
+  }
+
+  const rows =
+    await response.json();
+
+  for (
+    const row of
+    Array.isArray(rows)
+      ? rows
+      : []
+  ) {
+    try {
+      await deleteStorageObject(
+        row.storage_path,
+        accessToken
+      );
+    } catch (error) {
+      console.error(
+        "GeraMix: erro excluindo download expirado:",
+        error
+      );
+    }
+
+    try {
+      await deleteDownloadRecord(
+        row.id,
+        accessToken
+      );
+    } catch (error) {
+      console.error(
+        "GeraMix: erro excluindo registro expirado:",
+        error
+      );
+    }
+  }
+}
+
+/* =========================================================
+   CENTRAL DE DOWNLOADS
+========================================================= */
+
+app.get(
+  "/api/downloads",
+  requireAuth,
+  async (req, res) => {
+    try {
+      await cleanupExpiredDownloads(
+        req.user.id,
+        req.accessToken
+      );
+
+      const response =
+        await fetch(
+          `${SUPABASE_URL}/rest/v1/downloads?user_id=eq.${encodeURIComponent(req.user.id)}&order=created_at.desc`,
+          {
+            method:
+              "GET",
+
+            headers: {
+              Authorization:
+                `Bearer ${req.accessToken}`,
+
+              apikey:
+                SUPABASE_ANON_KEY
+            }
+          }
+        );
+
+      if (!response.ok) {
+        return res.status(500).json({
+          error:
+            "Não foi possível carregar seus downloads."
+        });
+      }
+
+      const rows =
+        await response.json();
+
+      return res.json(
+        (
+          Array.isArray(rows)
+            ? rows
+            : []
+        ).map(
+          row => ({
+            id:
+              row.id,
+
+            jobId:
+              row.job_id,
+
+            fileName:
+              row.file_name,
+
+            originality:
+              Number.isFinite(
+                Number(
+                  row.originality
+                )
+              )
+                ? Number(
+                    row.originality
+                  )
+                : null,
+
+            createdAt:
+              row.created_at,
+
+            expiresAt:
+              row.expires_at,
+
+            videoUrl:
+              `/api/downloads/${encodeURIComponent(row.id)}/video?token=${encodeURIComponent(req.accessToken)}`
+          })
+        )
+      );
+    } catch (error) {
+      console.error(
+        "GeraMix: erro na Central de Downloads:",
+        error
+      );
+
+      return res.status(500).json({
+        error:
+          "Não foi possível carregar seus downloads."
+      });
+    }
+  }
+);
+
+/* =========================================================
+   EXCLUIR DOWNLOAD DA CENTRAL
+========================================================= */
+
+app.delete(
+  "/api/downloads/:id",
+  requireAuth,
+  async (req, res) => {
+    try {
+      const response =
+        await fetch(
+          `${SUPABASE_URL}/rest/v1/downloads?id=eq.${encodeURIComponent(req.params.id)}&user_id=eq.${encodeURIComponent(req.user.id)}&select=id,storage_path`,
+          {
+            method:
+              "GET",
+
+            headers: {
+              Authorization:
+                `Bearer ${req.accessToken}`,
+
+              apikey:
+                SUPABASE_ANON_KEY
+            }
+          }
+        );
+
+      if (!response.ok) {
+        return res.status(500).json({
+          error:
+            "Não foi possível localizar o download."
+        });
+      }
+
+      const rows =
+        await response.json();
+
+      const row =
+        Array.isArray(rows)
+          ? rows[0]
+          : null;
+
+      if (!row) {
+        return res.status(404).json({
+          error:
+            "Download não encontrado."
+        });
+      }
+
+      await deleteStorageObject(
+        row.storage_path,
+        req.accessToken
+      );
+
+      await deleteDownloadRecord(
+        row.id,
+        req.accessToken
+      );
+
+      return res.json({
+        ok: true
+      });
+    } catch (error) {
+      console.error(
+        "GeraMix: erro excluindo download:",
+        error
+      );
+
+      return res.status(500).json({
+        error:
+          "Não foi possível excluir o download."
+      });
+    }
+  }
+);
+
+/* =========================================================
+   STREAM DE ARQUIVO DA CENTRAL
+========================================================= */
+
+async function streamStoredFile(
+  file,
+  req,
+  res
+) {
+  const storagePath =
+    file.storage_path ||
+    file.storagePath;
+
+  const response =
+    await fetchStorageObject(
+      storagePath,
+      req.accessToken,
+      req.headers.range || null
+    );
+
+  if (!response.ok) {
+    return res.sendStatus(
+      response.status === 404
+        ? 404
+        : 500
+    );
+  }
+
+  res.status(
+    response.status
+  );
+
+  res.setHeader(
+    "Content-Type",
+    response.headers.get(
+      "content-type"
+    ) || "video/mp4"
+  );
+
+  res.setHeader(
+    "Accept-Ranges",
+    "bytes"
+  );
+
+  res.setHeader(
+    "Cache-Control",
+    "private, no-store"
+  );
+
+  res.setHeader(
+    "Content-Disposition",
+    `inline; filename="${safeName(
+      file.file_name ||
+      file.name
+    )}"`
+  );
+
+  const contentLength =
+    response.headers.get(
+      "content-length"
+    );
+
+  const contentRange =
+    response.headers.get(
+      "content-range"
+    );
+
+  if (contentLength) {
+    res.setHeader(
+      "Content-Length",
+      contentLength
+    );
+  }
+
+  if (contentRange) {
+    res.setHeader(
+      "Content-Range",
+      contentRange
+    );
+  }
+
+  if (!response.body) {
+    return res.end();
+  }
+
+  return Readable
+    .fromWeb(
+      response.body
+    )
+    .pipe(res);
+}
+
+/* =========================================================
+   VISUALIZAÇÃO DA CENTRAL
+========================================================= */
+
+app.get(
+  "/api/downloads/:id/video",
+  requireAuth,
+  async (req, res) => {
+    try {
+      const response =
+        await fetch(
+          `${SUPABASE_URL}/rest/v1/downloads?id=eq.${encodeURIComponent(req.params.id)}&user_id=eq.${encodeURIComponent(req.user.id)}&select=id,file_name,storage_path,expires_at`,
+          {
+            method:
+              "GET",
+
+            headers: {
+              Authorization:
+                `Bearer ${req.accessToken}`,
+
+              apikey:
+                SUPABASE_ANON_KEY
+            }
+          }
+        );
+
+      if (!response.ok) {
+        return res.sendStatus(
+          500
+        );
+      }
+
+      const rows =
+        await response.json();
+
+      const file =
+        Array.isArray(rows)
+          ? rows[0]
+          : null;
+
+      if (!file) {
+        return res.sendStatus(
+          404
+        );
+      }
+
+      return streamStoredFile(
+        file,
+        req,
+        res
+      );
+    } catch (error) {
+      console.error(
+        "GeraMix: erro exibindo download:",
+        error
+      );
+
+      return res.sendStatus(
+        500
+      );
+    }
+  }
+);
+
+/* =========================================================
+   JOBS
+========================================================= */
+
+const jobs =
+  new Map();
+
+/* =========================================================
+   RECUPERA JOB PELOS DOWNLOADS SALVOS
+========================================================= */
+
+async function getPersistentJobFromDownloads(
+  id,
+  userId,
+  accessToken
+) {
+  const response =
+    await fetch(
+      `${SUPABASE_URL}/rest/v1/downloads?job_id=eq.${encodeURIComponent(id)}&user_id=eq.${encodeURIComponent(userId)}&order=created_at.asc`,
+      {
+        method:
+          "GET",
+
+        headers: {
+          Authorization:
+            `Bearer ${accessToken}`,
+
+          apikey:
+            SUPABASE_ANON_KEY
+        }
+      }
+    );
+
+  if (!response.ok) {
+    throw new Error(
+      "Não foi possível consultar os vídeos salvos."
+    );
+  }
+
+  const rows =
+    await response.json();
+
+  if (
+    !Array.isArray(rows) ||
+    rows.length === 0
+  ) {
+    return null;
+  }
+
+  const files =
+    rows.map(
+      (
+        row,
+        index
+      ) => ({
+        name:
+          row.file_name,
+
+        originality:
+          Number.isFinite(
+            Number(
+              row.originality
+            )
+          )
+            ? Number(
+                row.originality
+              )
+            : null,
+
+        index:
+          index + 1,
+
+        stored:
+          true,
+
+        storagePath:
+          row.storage_path,
+
+        createdAt:
+          row.created_at,
+
+        expiresAt:
+          row.expires_at
+      })
+    );
+
+  return {
+    id,
+
+    userId,
+
+    status:
+      "done",
+
+    total:
+      files.length,
+
+    done:
+      files.length,
+
+    current:
+      "Concluído",
+
+    files,
+
+    error:
+      null,
+
+    zip:
+      `/api/jobs/${id}/zip`
+  };
+}
+
+function publicJob(job) {
+  const copy =
+    {
+      ...job
+    };
+
+  delete copy.accessToken;
+  delete copy.inputStoragePaths;
+
+  return copy;
+}
+
+/* =========================================================
+   MULTER — COMPATIBILIDADE
+========================================================= */
+
+const upload =
+  multer({
+    dest:
+      UPLOADS,
+
+    limits: {
+      files:
+        30,
+
+      fileSize:
+        200 * 1024 * 1024
+    }
+  });
+
+/* =========================================================
+   ENTRADAS VINDAS DO STORAGE
+========================================================= */
+
+function normalizeInputDescriptor(
+  item
+) {
+  if (
+    !item ||
+    typeof item !==
+      "object"
+  ) {
+    return null;
+  }
+
+  const storagePath =
+    String(
+      item.storagePath ||
+      ""
+    ).trim();
+
+  const originalName =
+    String(
+      item.originalName ||
+      item.originalname ||
+      "video.mp4"
+    ).trim();
+
+  if (!storagePath) {
+    return null;
+  }
+
+  return {
+    storagePath,
+
+    originalName:
+      originalName ||
+      "video.mp4"
+  };
+}
+
+async function materializeStorageInputs(
+  inputs,
+  jobId,
+  accessToken
+) {
+  const categories = {
+    hooks:
+      Array.isArray(
+        inputs?.hooks
+      )
+        ? inputs.hooks
+        : [],
+
+    bodies:
+      Array.isArray(
+        inputs?.bodies
+      )
+        ? inputs.bodies
+        : [],
+
+    ctas:
+      Array.isArray(
+        inputs?.ctas
+      )
+        ? inputs.ctas
+        : []
+  };
+
+  const result = {
+    hooks: [],
+    bodies: [],
+    ctas: []
+  };
+
+  const paths = [];
+
+  const dir =
+    path.join(
+      JOBS,
+      jobId
+    );
+
+  for (
+    const [
+      category,
+      rawItems
+    ] of Object.entries(
+      categories
+    )
+  ) {
+    for (
+      let index = 0;
+      index < rawItems.length;
+      index++
+    ) {
+      const item =
+        normalizeInputDescriptor(
+          rawItems[index]
+        );
+
+      if (!item) {
+        throw new Error(
+          `Entrada inválida em ${category}.`
+        );
+      }
+
+      const localPath =
+        path.join(
+          dir,
+          `source-${category}-${String(
+            index + 1
+          ).padStart(
+            3,
+            "0"
+          )}-${crypto.randomUUID()}.mp4`
+        );
+
+      await downloadStorageObjectToFile(
+        item.storagePath,
+        accessToken,
+        localPath
+      );
+
+      const file = {
+        path:
+          localPath,
+
+        originalname:
+          item.originalName,
+
+        storagePath:
+          item.storagePath
+      };
+
+      result[
+        category
+      ].push(file);
+
+      paths.push(
+        item.storagePath
+      );
+    }
+  }
+
+  return {
+    ...result,
+
+    inputStoragePaths:
+      paths
+  };
+}
+
+/* =========================================================
+   ARQUIVOS NORMALIZADOS
+========================================================= */
+
+function getCombinationFiles(
+  job,
+  file
+) {
+  const dir =
+    path.join(
+      JOBS,
+      job.id
+    );
+
+  return [
+    path.join(
+      dir,
+      `hook-${String(
+        file.hookIndex
+      ).padStart(
+        3,
+        "0"
+      )}.mp4`
+    ),
+
+    path.join(
+      dir,
+      `body-${String(
+        file.bodyIndex
+      ).padStart(
+        3,
+        "0"
+      )}.mp4`
+    ),
+
+    path.join(
+      dir,
+      `cta-${String(
+        file.ctaIndex
+      ).padStart(
+        3,
+        "0"
+      )}.mp4`
+    )
+  ];
+}
+
+/* =========================================================
+   CRIA VÍDEO FINAL TEMPORÁRIO
+========================================================= */
+
+async function createVideoForJob(
+  job,
+  file
+) {
+  const dir =
+    path.join(
+      JOBS,
+      job.id
+    );
+
+  const output =
+    path.join(
+      dir,
+      `temp-${crypto.randomUUID()}.mp4`
+    );
+
+  try {
+    await concatNormalized(
+      getCombinationFiles(
+        job,
+        file
+      ),
+      output,
+      dir
+    );
+
+    return output;
+  } catch (error) {
+    await fsp.rm(
+      output,
+      {
+        force: true
+      }
+    );
+
+    throw error;
+  }
+}
+
+/* =========================================================
+   CAMINHO DOS DOWNLOADS
+========================================================= */
+
+function getDownloadStoragePath(
+  userId,
+  jobId,
+  fileName
+) {
+  return [
+    userId,
+    jobId,
+    safeName(fileName)
+  ].join("/");
+}
+
+/* =========================================================
+   GERA + SALVA + REGISTRA VÍDEO
+========================================================= */
 
 async function createAndStoreDownload(
   job,
@@ -1164,17 +1720,12 @@ async function createAndStoreDownload(
         accessToken
       });
     } catch (error) {
-      try {
-        await deleteStorageObject(
-          storagePath,
-          accessToken
-        );
-      } catch (cleanupError) {
-        console.error(
-          "GeraMix: erro removendo arquivo órfão:",
-          cleanupError
-        );
-      }
+      await deleteStorageObject(
+        storagePath,
+        accessToken
+      ).catch(
+        () => {}
+      );
 
       throw error;
     }
@@ -1191,1035 +1742,208 @@ async function createAndStoreDownload(
 }
 
 /* =========================================================
-   CENTRAL DE DOWNLOADS — BANCO
+   PROCESSAMENTO
 ========================================================= */
 
-async function deleteDownloadRecord(
-  id,
-  accessToken
+async function processJob(
+  job,
+  source
 ) {
-  const response =
-    await fetch(
-      `${SUPABASE_URL}/rest/v1/downloads?id=eq.${encodeURIComponent(id)}`,
-      {
-        method: "DELETE",
+  const normalizedHooks =
+    [];
 
-        headers: {
-          Authorization:
-            `Bearer ${accessToken}`,
+  const normalizedBodies =
+    [];
 
-          apikey:
-            SUPABASE_ANON_KEY
-        }
-      }
-    );
+  const normalizedCtas =
+    [];
 
-  if (!response.ok) {
-    throw new Error(
-      `Supabase não conseguiu excluir o registro (${response.status}).`
-    );
-  }
-}
+  try {
+    const hooks =
+      source.hooks;
 
-async function getUserDownloads(
-  userId,
-  accessToken
-) {
-  const response =
-    await fetch(
-      `${SUPABASE_URL}/rest/v1/downloads?user_id=eq.${encodeURIComponent(userId)}&order=created_at.desc`,
-      {
-        method: "GET",
+    const bodies =
+      source.bodies;
 
-        headers: {
-          Authorization:
-            `Bearer ${accessToken}`,
-
-          apikey:
-            SUPABASE_ANON_KEY
-        }
-      }
-    );
-
-  if (!response.ok) {
-    throw new Error(
-      "Não foi possível carregar a Central de Downloads."
-    );
-  }
-
-  return await response.json();
-}
-
-/*
-  Remove arquivos expirados quando a Central é acessada.
-*/
-async function cleanupExpiredDownloads(
-  userId,
-  accessToken
-) {
-  const now =
-    new Date().toISOString();
-
-  const response =
-    await fetch(
-      `${SUPABASE_URL}/rest/v1/downloads?user_id=eq.${encodeURIComponent(userId)}&expires_at=lt.${encodeURIComponent(now)}&select=id,storage_path`,
-      {
-        method: "GET",
-
-        headers: {
-          Authorization:
-            `Bearer ${accessToken}`,
-
-          apikey:
-            SUPABASE_ANON_KEY
-        }
-      }
-    );
-
-  if (!response.ok) {
-    return;
-  }
-
-  const expired =
-    await response.json();
-
-  for (const item of expired) {
-    try {
-      await deleteStorageObject(
-        item.storage_path,
-        accessToken
-      );
-    } catch (error) {
-      console.error(
-        "GeraMix: erro removendo download expirado:",
-        error
-      );
-    }
-
-    try {
-      await deleteDownloadRecord(
-        item.id,
-        accessToken
-      );
-    } catch (error) {
-      console.error(
-        "GeraMix: erro removendo registro expirado:",
-        error
-      );
-    }
-  }
-}
-
-/* =========================================================
-   API CENTRAL DE DOWNLOADS
-========================================================= */
-
-app.get(
-  "/api/downloads",
-  requireAuth,
-  async (req, res) => {
-    try {
-      await cleanupExpiredDownloads(
-        req.user.id,
-        req.accessToken
-      );
-
-      const downloads =
-        await getUserDownloads(
-          req.user.id,
-          req.accessToken
-        );
-
-      res.json({
-        downloads
-      });
-    } catch (error) {
-      console.error(
-        "Erro carregando downloads:",
-        error
-      );
-
-      res.status(500).json({
-        error:
-          error?.message ||
-          "Erro ao carregar downloads."
-      });
-    }
-  }
-);
-
-/* =========================================================
-   VISUALIZAÇÃO / DOWNLOAD DA CENTRAL
-========================================================= */
-
-app.get(
-  "/api/downloads/:id/video",
-  requireAuth,
-  async (req, res) => {
-    try {
-      const response =
-        await fetch(
-          `${SUPABASE_URL}/rest/v1/downloads?id=eq.${encodeURIComponent(req.params.id)}&user_id=eq.${encodeURIComponent(req.user.id)}&select=id,file_name,storage_path,expires_at`,
-          {
-            method: "GET",
-
-            headers: {
-              Authorization:
-                `Bearer ${req.accessToken}`,
-
-              apikey:
-                SUPABASE_ANON_KEY
-            }
-          }
-        );
-
-      if (!response.ok) {
-        return res.sendStatus(404);
-      }
-
-      const rows =
-        await response.json();
-
-      const item =
-        rows[0];
-
-      if (!item) {
-        return res.sendStatus(404);
-      }
-
-      if (
-        new Date(item.expires_at).getTime() <=
-        Date.now()
-      ) {
-        try {
-          await deleteStorageObject(
-            item.storage_path,
-            req.accessToken
-          );
-        } catch {}
-
-        try {
-          await deleteDownloadRecord(
-            item.id,
-            req.accessToken
-          );
-        } catch {}
-
-        return res.sendStatus(404);
-      }
-
-      const encodedPath =
-        item.storage_path
-          .split("/")
-          .map(encodeURIComponent)
-          .join("/");
-
-      const headers = {
-        Authorization:
-          `Bearer ${req.accessToken}`,
-
-        apikey:
-          SUPABASE_ANON_KEY
-      };
-
-      if (req.headers.range) {
-        headers.Range =
-          req.headers.range;
-      }
-
-      const storageResponse =
-        await fetch(
-          `${SUPABASE_URL}/storage/v1/object/${SUPABASE_DOWNLOAD_BUCKET}/${encodedPath}`,
-          {
-            method: "GET",
-            headers
-          }
-        );
-
-      if (!storageResponse.ok) {
-        return res.sendStatus(
-          storageResponse.status === 404
-            ? 404
-            : 500
-        );
-      }
-
-      res.status(
-        storageResponse.status
-      );
-
-      res.setHeader(
-        "Content-Type",
-        storageResponse.headers.get(
-          "content-type"
-        ) || "video/mp4"
-      );
-
-      const contentLength =
-        storageResponse.headers.get(
-          "content-length"
-        );
-
-      const contentRange =
-        storageResponse.headers.get(
-          "content-range"
-        );
-
-      const acceptRanges =
-        storageResponse.headers.get(
-          "accept-ranges"
-        );
-
-      if (contentLength) {
-        res.setHeader(
-          "Content-Length",
-          contentLength
-        );
-      }
-
-      if (contentRange) {
-        res.setHeader(
-          "Content-Range",
-          contentRange
-        );
-      }
-
-      if (acceptRanges) {
-        res.setHeader(
-          "Accept-Ranges",
-          acceptRanges
-        );
-      } else {
-        res.setHeader(
-          "Accept-Ranges",
-          "bytes"
-        );
-      }
-
-      res.setHeader(
-        "Cache-Control",
-        "private, no-store"
-      );
-
-      res.setHeader(
-        "Content-Disposition",
-        `inline; filename="${safeName(item.file_name)}"`
-      );
-
-      if (!storageResponse.body) {
-        return res.end();
-      }
-
-      Readable.fromWeb(
-        storageResponse.body
-      ).pipe(res);
-    } catch (error) {
-      console.error(
-        "Erro entregando download:",
-        error
-      );
-
-      if (!res.headersSent) {
-        res.status(500).send(
-          "Erro ao abrir o vídeo."
-        );
-      } else {
-        res.destroy(error);
-      }
-    }
-  }
-);
-
-/* =========================================================
-   EXCLUI DOWNLOAD DA CENTRAL
-========================================================= */
-
-app.delete(
-  "/api/downloads/:id",
-  requireAuth,
-  async (req, res) => {
-    try {
-      const response =
-        await fetch(
-          `${SUPABASE_URL}/rest/v1/downloads?id=eq.${encodeURIComponent(req.params.id)}&user_id=eq.${encodeURIComponent(req.user.id)}&select=id,storage_path`,
-          {
-            method: "GET",
-
-            headers: {
-              Authorization:
-                `Bearer ${req.accessToken}`,
-
-              apikey:
-                SUPABASE_ANON_KEY
-            }
-          }
-        );
-
-      if (!response.ok) {
-        return res.status(404).json({
-          error:
-            "Download não encontrado."
-        });
-      }
-
-      const rows =
-        await response.json();
-
-      const item =
-        rows[0];
-
-      if (!item) {
-        return res.status(404).json({
-          error:
-            "Download não encontrado."
-        });
-      }
-
-      try {
-        await deleteStorageObject(
-          item.storage_path,
-          req.accessToken
-        );
-      } catch (error) {
-        console.error(
-          "GeraMix: erro excluindo arquivo:",
-          error
-        );
-      }
-
-      await deleteDownloadRecord(
-        item.id,
-        req.accessToken
-      );
-
-      res.json({
-        ok: true
-      });
-    } catch (error) {
-      console.error(
-        "Erro excluindo download:",
-        error
-      );
-
-      res.status(500).json({
-        error:
-          error?.message ||
-          "Erro ao excluir download."
-      });
-    }
-  }
-);
-
-/* =========================================================
-   CRIA JOB
-========================================================= */
-
-app.post(
-  "/api/jobs",
-  requireAuth,
-
-  /*
-    Multer continua aceitando o formato antigo.
-    O novo index.html envia JSON.
-  */
-  upload.fields([
-    {
-      name: "hooks",
-      maxCount: MAX_HOOKS
-    },
-    {
-      name: "bodies",
-      maxCount: MAX_BODIES
-    },
-    {
-      name: "ctas",
-      maxCount: MAX_CTAS
-    }
-  ]),
-
-  async (req, res) => {
-    let hooks = [];
-    let bodies = [];
-    let ctas = [];
-
-    let usingStorageInputs = false;
-
-    /*
-      ======================================================
-      NOVO FORMATO
-      JSON:
-      {
-        inputs: {
-          hooks: [...],
-          bodies: [...],
-          ctas: [...]
-        }
-      }
-      ======================================================
-    */
-
-    if (
-      req.body &&
-      req.body.inputs
-    ) {
-      usingStorageInputs = true;
-
-      const inputs =
-        req.body.inputs;
-
-      if (
-        !Array.isArray(inputs.hooks) ||
-        !Array.isArray(inputs.bodies) ||
-        !Array.isArray(inputs.ctas)
-      ) {
-        return res.status(400).json({
-          error:
-            "Os vídeos enviados estão em formato inválido."
-        });
-      }
-
-      if (
-        inputs.hooks.length < 1 ||
-        inputs.bodies.length < 1 ||
-        inputs.ctas.length < 1
-      ) {
-        return res.status(400).json({
-          error:
-            "Envie pelo menos 1 vídeo em cada categoria."
-        });
-      }
-
-      if (
-        inputs.hooks.length > MAX_HOOKS ||
-        inputs.bodies.length > MAX_BODIES ||
-        inputs.ctas.length > MAX_CTAS
-      ) {
-        return res.status(400).json({
-          error:
-            "Quantidade de vídeos acima do limite permitido."
-        });
-      }
-
-      const total =
-        inputs.hooks.length *
-        inputs.bodies.length *
-        inputs.ctas.length;
-
-      if (
-        total >
-        MAX_COMBINATIONS
-      ) {
-        return res.status(400).json({
-          error:
-            `Limite de ${MAX_COMBINATIONS} combinações por lote.`
-        });
-      }
-
-      const id =
-        crypto.randomUUID();
-
-      const dir =
-        path.join(
-          JOBS,
-          id
-        );
-
-      try {
-        await fsp.mkdir(
-          dir,
-          {
-            recursive: true
-          }
-        );
-
-        /*
-          Baixa os arquivos enviados ao Storage
-          para o processamento temporário.
-        */
-        hooks =
-          await materializeInputCategory(
-            "hooks",
-            inputs.hooks,
-            req.user.id,
-            req.accessToken,
-            dir
-          );
-
-        bodies =
-          await materializeInputCategory(
-            "bodies",
-            inputs.bodies,
-            req.user.id,
-            req.accessToken,
-            dir
-          );
-
-        ctas =
-          await materializeInputCategory(
-            "ctas",
-            inputs.ctas,
-            req.user.id,
-            req.accessToken,
-            dir
-          );
-      } catch (error) {
-        await fsp.rm(
-          dir,
-          {
-            recursive: true,
-            force: true
-          }
-        ).catch(() => {});
-
-        return res.status(400).json({
-          error:
-            error?.message ||
-            "Não foi possível preparar os vídeos enviados."
-        });
-      }
-
-      await startJobProcessing({
-        req,
-        res,
-        id,
-        dir,
-        hooks,
-        bodies,
-        ctas,
-        total
-      });
-
-      return;
-    }
-
-    /*
-      ======================================================
-      FORMATO ANTIGO — MULTIPART
-      ======================================================
-    */
-
-    hooks =
-      req.files?.hooks || [];
-
-    bodies =
-      req.files?.bodies || [];
-
-    ctas =
-      req.files?.ctas || [];
-
-    if (
-      !hooks.length ||
-      !bodies.length ||
-      !ctas.length
-    ) {
-      return res.status(400).json({
-        error:
-          "Envie pelo menos 1 vídeo em cada categoria."
-      });
-    }
-
-    if (
-      hooks.length > MAX_HOOKS ||
-      bodies.length > MAX_BODIES ||
-      ctas.length > MAX_CTAS
-    ) {
-      await removeUploadedFiles([
-        ...hooks,
-        ...bodies,
-        ...ctas
-      ]);
-
-      return res.status(400).json({
-        error:
-          "Quantidade de vídeos acima do limite permitido."
-      });
-    }
-
-    const total =
-      hooks.length *
-      bodies.length *
-      ctas.length;
-
-    if (
-      total >
-      MAX_COMBINATIONS
-    ) {
-      await removeUploadedFiles([
-        ...hooks,
-        ...bodies,
-        ...ctas
-      ]);
-
-      return res.status(400).json({
-        error:
-          `Limite de ${MAX_COMBINATIONS} combinações por lote.`
-      });
-    }
-
-    const id =
-      crypto.randomUUID();
+    const ctas =
+      source.ctas;
 
     const dir =
       path.join(
         JOBS,
-        id
+        job.id
       );
 
-    await fsp.mkdir(
-      dir,
-      {
-        recursive: true
-      }
-    );
+    /* =====================================================
+       1. GANCHOS
+    ===================================================== */
 
-    await startJobProcessing({
-      req,
-      res,
-      id,
-      dir,
-      hooks,
-      bodies,
-      ctas,
-      total
-    });
-  }
-);
+    job.current =
+      "Preparando ganchos…";
 
-/* =========================================================
-   REMOVE UPLOADS
-========================================================= */
+    for (
+      let i = 0;
+      i < hooks.length;
+      i++
+    ) {
+      const file =
+        hooks[i];
 
-async function removeUploadedFiles(
-  files
-) {
-  await Promise.all(
-    files.map(
-      file =>
-        file?.path
-          ? fsp.rm(
-              file.path,
-              {
-                force: true
-              }
-            )
-          : Promise.resolve()
-    )
-  );
-}
+      const output =
+        path.join(
+          dir,
+          `hook-${String(
+            i + 1
+          ).padStart(
+            3,
+            "0"
+          )}.mp4`
+        );
 
-/* =========================================================
-   PROCESSAMENTO DO JOB
-========================================================= */
-
-async function startJobProcessing({
-  req,
-  res,
-  id,
-  dir,
-  hooks,
-  bodies,
-  ctas,
-  total
-}) {
-  let quota;
-
-  try {
-    quota =
-      await reserveVideoQuota(
-        req.user.id,
-        req.accessToken,
-        total
+      await normalizeVideo(
+        file.path,
+        output,
+        dir
       );
-  } catch (error) {
-    await removeUploadedFiles([
-      ...hooks,
-      ...bodies,
-      ...ctas
-    ]);
 
-    await fsp.rm(
-      dir,
-      {
-        recursive: true,
-        force: true
-      }
-    ).catch(() => {});
+      normalizedHooks.push({
+        source:
+          file,
 
-    return res.status(503).json({
-      error:
-        error?.message ||
-        "Não foi possível verificar sua cota mensal."
-    });
-  }
+        path:
+          output
+      });
+    }
 
-  if (!quota.allowed) {
-    await removeUploadedFiles([
-      ...hooks,
-      ...bodies,
-      ...ctas
-    ]);
+    /* =====================================================
+       2. CORPOS
+    ===================================================== */
 
-    await fsp.rm(
-      dir,
-      {
-        recursive: true,
-        force: true
-      }
-    ).catch(() => {});
+    job.current =
+      "Preparando corpos…";
 
-    return res.status(403).json({
-      error:
-        quota.message ||
-        "Limite mensal de vídeos atingido.",
+    for (
+      let i = 0;
+      i < bodies.length;
+      i++
+    ) {
+      const file =
+        bodies[i];
 
-      videosUsed:
-        quota.videosUsed,
+      const output =
+        path.join(
+          dir,
+          `body-${String(
+            i + 1
+          ).padStart(
+            3,
+            "0"
+          )}.mp4`
+        );
 
-      monthlyLimit:
-        quota.monthlyLimit
-    });
-  }
+      await normalizeVideo(
+        file.path,
+        output,
+        dir
+      );
 
-  const job = {
-    id,
+      normalizedBodies.push({
+        source:
+          file,
 
-    userId:
-      req.user.id,
+        path:
+          output
+      });
+    }
 
-    /*
-      IMPORTANTE:
-      o token precisa ficar disponível durante
-      o processamento assíncrono.
-    */
-    accessToken:
-      req.accessToken,
+    /* =====================================================
+       3. CTAS
+    ===================================================== */
 
-    status:
-      "processing",
+    job.current =
+      "Preparando CTAs…";
 
-    total,
+    for (
+      let i = 0;
+      i < ctas.length;
+      i++
+    ) {
+      const file =
+        ctas[i];
 
-    done:
-      0,
+      const output =
+        path.join(
+          dir,
+          `cta-${String(
+            i + 1
+          ).padStart(
+            3,
+            "0"
+          )}.mp4`
+        );
 
-    current:
-      "Iniciando…",
+      await normalizeVideo(
+        file.path,
+        output,
+        dir
+      );
 
-    files: [],
+      normalizedCtas.push({
+        source:
+          file,
 
-    error:
-      null,
+        path:
+          output
+      });
+    }
 
-    mode:
-      "storage-inputs",
+    /* =====================================================
+       4. CRIA COMBINAÇÕES
+    ===================================================== */
 
-    videosUsed:
-      quota.videosUsed,
+    job.current =
+      "Preparando combinações…";
 
-    monthlyLimit:
-      quota.monthlyLimit,
+    let index =
+      0;
 
-    zip:
-      null
-  };
-
-  jobs.set(
-    id,
-    job
-  );
-
-  res.json({
-    id,
-
-    total,
-
-    videosUsed:
-      quota.videosUsed,
-
-    monthlyLimit:
-      quota.monthlyLimit
-  });
-
-  /*
-    O restante roda em segundo plano.
-  */
-  (async () => {
-    const normalizedHooks = [];
-    const normalizedBodies = [];
-    const normalizedCtas = [];
-
-    try {
-      /* ================================================
-         1. GANCHOS
-      ================================================ */
-
-      job.current =
-        "Preparando ganchos…";
-
+    for (
+      let hookIndex = 0;
+      hookIndex <
+        normalizedHooks.length;
+      hookIndex++
+    ) {
       for (
-        let i = 0;
-        i < hooks.length;
-        i++
-      ) {
-        const file =
-          hooks[i];
-
-        const output =
-          path.join(
-            dir,
-            `hook-${String(i + 1).padStart(3, "0")}.mp4`
-          );
-
-        await normalizeVideo(
-          file.path,
-          output,
-          dir
-        );
-
-        normalizedHooks.push({
-          source:
-            file,
-
-          path:
-            output
-        });
-
-        await fsp.rm(
-          file.path,
-          {
-            force: true
-          }
-        );
-      }
-
-      /* ================================================
-         2. CORPOS
-      ================================================ */
-
-      job.current =
-        "Preparando corpos…";
-
-      for (
-        let i = 0;
-        i < bodies.length;
-        i++
-      ) {
-        const file =
-          bodies[i];
-
-        const output =
-          path.join(
-            dir,
-            `body-${String(i + 1).padStart(3, "0")}.mp4`
-          );
-
-        await normalizeVideo(
-          file.path,
-          output,
-          dir
-        );
-
-        normalizedBodies.push({
-          source:
-            file,
-
-          path:
-            output
-        });
-
-        await fsp.rm(
-          file.path,
-          {
-            force: true
-          }
-        );
-      }
-
-      /* ================================================
-         3. CTAs
-      ================================================ */
-
-      job.current =
-        "Preparando CTAs…";
-
-      for (
-        let i = 0;
-        i < ctas.length;
-        i++
-      ) {
-        const file =
-          ctas[i];
-
-        const output =
-          path.join(
-            dir,
-            `cta-${String(i + 1).padStart(3, "0")}.mp4`
-          );
-
-        await normalizeVideo(
-          file.path,
-          output,
-          dir
-        );
-
-        normalizedCtas.push({
-          source:
-            file,
-
-          path:
-            output
-        });
-
-        await fsp.rm(
-          file.path,
-          {
-            force: true
-          }
-        );
-      }
-
-      /* ================================================
-         4. COMBINAÇÕES
-      ================================================ */
-
-      job.current =
-        "Preparando combinações…";
-
-      let index = 0;
-
-      for (
-        let hookIndex = 0;
-        hookIndex < normalizedHooks.length;
-        hookIndex++
+        let bodyIndex = 0;
+        bodyIndex <
+          normalizedBodies.length;
+        bodyIndex++
       ) {
         for (
-          let bodyIndex = 0;
-          bodyIndex < normalizedBodies.length;
-          bodyIndex++
+          let ctaIndex = 0;
+          ctaIndex <
+            normalizedCtas.length;
+          ctaIndex++
         ) {
-          for (
-            let ctaIndex = 0;
-            ctaIndex < normalizedCtas.length;
-            ctaIndex++
-          ) {
-            index++;
+          index++;
 
-            const hook =
-              normalizedHooks[
-                hookIndex
-              ];
+          const hook =
+            normalizedHooks[
+              hookIndex
+            ];
 
-            const body =
-              normalizedBodies[
-                bodyIndex
-              ];
+          const body =
+            normalizedBodies[
+              bodyIndex
+            ];
 
-            const cta =
-              normalizedCtas[
-                ctaIndex
-              ];
+          const cta =
+            normalizedCtas[
+              ctaIndex
+            ];
 
-            const currentCombination = {
+          const currentCombination =
+            {
               hook: {
                 path:
                   hook.source.path
@@ -2236,226 +1960,673 @@ async function startJobProcessing({
               }
             };
 
-            const previousIndex =
-              index - 2;
+          const previousIndex =
+            index - 2;
 
-            const previousCombination =
-              previousIndex >= 0
-                ? {
-                    hook: {
-                      path:
-                        normalizedHooks[
-                          Math.floor(
-                            previousIndex /
+          const previousCombination =
+            previousIndex >= 0
+              ? {
+                  hook: {
+                    path:
+                      normalizedHooks[
+                        Math.floor(
+                          previousIndex /
                             (
                               normalizedBodies.length *
                               normalizedCtas.length
                             )
-                          )
-                        ]?.source.path
-                    },
+                        )
+                      ]?.source.path
+                  },
 
-                    body: {
-                      path:
-                        normalizedBodies[
-                          Math.floor(
-                            (
-                              previousIndex /
-                              normalizedCtas.length
-                            ) %
-                            normalizedBodies.length
-                          )
-                        ]?.source.path
-                    },
+                  body: {
+                    path:
+                      normalizedBodies[
+                        Math.floor(
+                          (
+                            previousIndex /
+                            normalizedCtas.length
+                          ) %
+                          normalizedBodies.length
+                        )
+                      ]?.source.path
+                  },
 
-                    cta: {
-                      path:
-                        normalizedCtas[
-                          previousIndex %
-                          normalizedCtas.length
-                        ]?.source.path
-                    }
+                  cta: {
+                    path:
+                      normalizedCtas[
+                        previousIndex %
+                        normalizedCtas.length
+                      ]?.source.path
                   }
-                : null;
+                }
+              : null;
 
-            const originality =
-              calculateOriginality(
-                currentCombination,
-                previousCombination
-              );
+          const originality =
+            calculateOriginality(
+              currentCombination,
+              previousCombination
+            );
 
-            job.files.push({
-              name:
-                `video-${String(index).padStart(3, "0")}.mp4`,
+          job.files.push({
+            name:
+              `video-${String(
+                index
+              ).padStart(
+                3,
+                "0"
+              )}.mp4`,
 
-              hook:
-                safeName(
-                  hook.source.originalname
-                ),
+            hook:
+              safeName(
+                hook.source.originalname
+              ),
 
-              body:
-                safeName(
-                  body.source.originalname
-                ),
+            body:
+              safeName(
+                body.source.originalname
+              ),
 
-              cta:
-                safeName(
-                  cta.source.originalname
-                ),
+            cta:
+              safeName(
+                cta.source.originalname
+              ),
 
-              hookIndex:
-                hookIndex + 1,
+            hookIndex:
+              hookIndex + 1,
 
-              bodyIndex:
-                bodyIndex + 1,
+            bodyIndex:
+              bodyIndex + 1,
 
-              ctaIndex:
-                ctaIndex + 1,
+            ctaIndex:
+              ctaIndex + 1,
 
-              index,
+            index,
 
-              originality,
+            originality,
 
-              stored:
-                false,
+            stored:
+              false,
 
-              storagePath:
-                null
-            });
-          }
+            storagePath:
+              null
+          });
+
+          job.done =
+            index;
         }
       }
+    }
 
-      /* ================================================
-         5. SALVA UM VÍDEO POR VEZ
-      ================================================ */
+    job.files.sort(
+      (a, b) =>
+        a.index -
+        b.index
+    );
 
-      job.done = 0;
+    /* =====================================================
+       5. SALVA OS VÍDEOS NO STORAGE
+    ===================================================== */
 
-      for (
-        let i = 0;
-        i < job.files.length;
-        i++
-      ) {
-        const file =
-          job.files[i];
+    job.done =
+      0;
 
-        job.current =
-          `Salvando vídeos: ${i + 1}/${job.files.length}`;
-
-        const storagePath =
-          await createAndStoreDownload(
-            job,
-            file,
-            job.accessToken
-          );
-
-        file.stored =
-          true;
-
-        file.storagePath =
-          storagePath;
-
-        job.done =
-          i + 1;
-      }
-
-      /* ================================================
-         6. FINALIZADO
-      ================================================ */
+    for (
+      let i = 0;
+      i < job.files.length;
+      i++
+    ) {
+      const file =
+        job.files[i];
 
       job.current =
-        "Concluído";
+        `Salvando vídeos: ${
+          i + 1
+        }/${job.files.length}`;
 
-      job.status =
-        "done";
+      const storagePath =
+        await createAndStoreDownload(
+          job,
+          file,
+          job.accessToken
+        );
 
-      job.zip =
-        `/api/jobs/${id}/zip`;
+      file.stored =
+        true;
+
+      file.storagePath =
+        storagePath;
+
+      job.done =
+        i + 1;
+    }
+
+    /* =====================================================
+       6. AGORA SIM APAGA OS VÍDEOS DE ENTRADA
+    ===================================================== */
+
+    await deleteStorageObjectsBestEffort(
+      job.inputStoragePaths,
+      job.accessToken
+    );
+
+    /* =====================================================
+       7. FINALIZADO
+    ===================================================== */
+
+    job.current =
+      "Concluído";
+
+    job.status =
+      "done";
+
+    job.zip =
+      `/api/jobs/${job.id}/zip`;
+
+  } catch (error) {
+    console.error(
+      "GeraMix: erro no processamento:",
+      error
+    );
+
+    /* =====================================================
+       LIMPA VÍDEOS FINAIS SALVOS
+    ===================================================== */
+
+    for (
+      const file of
+      job.files.filter(
+        item =>
+          item.stored &&
+          item.storagePath
+      )
+    ) {
+      await deleteStorageObject(
+        file.storagePath,
+        job.accessToken
+      ).catch(
+        () => {}
+      );
+    }
+
+    /* =====================================================
+       LIMPA REGISTROS
+    ===================================================== */
+
+    await fetch(
+      `${SUPABASE_URL}/rest/v1/downloads?job_id=eq.${encodeURIComponent(
+        job.id
+      )}&user_id=eq.${encodeURIComponent(
+        job.userId
+      )}`,
+      {
+        method:
+          "DELETE",
+
+        headers: {
+          Authorization:
+            `Bearer ${job.accessToken}`,
+
+          apikey:
+            SUPABASE_ANON_KEY
+        }
+      }
+    ).catch(
+      () => {}
+    );
+
+    /* =====================================================
+       LIMPA INPUTS DO STORAGE
+    ===================================================== */
+
+    await deleteStorageObjectsBestEffort(
+      job.inputStoragePaths,
+      job.accessToken
+    );
+
+    /* =====================================================
+       DEVOLVE COTA
+    ===================================================== */
+
+    await releaseVideoQuota(
+      job.userId,
+      job.accessToken,
+      job.total
+    );
+
+    job.status =
+      "error";
+
+    job.error =
+      error?.message ||
+      "Erro desconhecido.";
+
+    job.current =
+      "Falhou";
+
+  } finally {
+    /* =====================================================
+       LIMPA INPUTS LOCAIS
+    ===================================================== */
+
+    await Promise.all(
+      [
+        ...source.hooks,
+        ...source.bodies,
+        ...source.ctas
+      ].map(
+        file =>
+          fsp.rm(
+            file.path,
+            {
+              force: true
+            }
+          ).catch(
+            () => {}
+          )
+      )
+    );
+  }
+}
+
+/* =========================================================
+   PREPARAÇÃO MULTIPART
+========================================================= */
+
+async function prepareMultipartSource(
+  req
+) {
+  return {
+    hooks:
+      req.files?.hooks ||
+      [],
+
+    bodies:
+      req.files?.bodies ||
+      [],
+
+    ctas:
+      req.files?.ctas ||
+      [],
+
+    inputStoragePaths:
+      []
+  };
+}
+
+/* =========================================================
+   PREPARAÇÃO JSON
+========================================================= */
+
+async function prepareJsonSource(
+  req,
+  jobId
+) {
+  return materializeStorageInputs(
+    req.body?.inputs,
+    jobId,
+    req.accessToken
+  );
+}
+
+/* =========================================================
+   CRIA JOB
+========================================================= */
+
+app.post(
+  "/api/jobs",
+
+  requireAuth,
+
+  upload.fields([
+    {
+      name:
+        "hooks",
+
+      maxCount:
+        5
+    },
+
+    {
+      name:
+        "bodies",
+
+      maxCount:
+        5
+    },
+
+    {
+      name:
+        "ctas",
+
+      maxCount:
+        6
+    }
+  ]),
+
+  async (
+    req,
+    res
+  ) => {
+    const isJson =
+      String(
+        req.headers[
+          "content-type"
+        ] || ""
+      )
+        .toLowerCase()
+        .includes(
+          "application/json"
+        );
+
+    let id =
+      crypto.randomUUID();
+
+    let source =
+      null;
+
+    try {
+      /* ===================================================
+         NOVO FLUXO:
+         JSON + ARQUIVOS JÁ NO SUPABASE STORAGE
+      =================================================== */
+
+      if (isJson) {
+        source =
+          await prepareJsonSource(
+            req,
+            id
+          );
+      } else {
+        /* ================================================
+           FLUXO ANTIGO:
+           MULTIPART/MULTER
+        ================================================ */
+
+        source =
+          await prepareMultipartSource(
+            req
+          );
+      }
+
+      const hooks =
+        source.hooks || [];
+
+      const bodies =
+        source.bodies || [];
+
+      const ctas =
+        source.ctas || [];
+
+      /* ===================================================
+         VALIDA CATEGORIAS
+      =================================================== */
+
+      if (
+        !hooks.length ||
+        !bodies.length ||
+        !ctas.length
+      ) {
+        await deleteStorageObjectsBestEffort(
+          source.inputStoragePaths,
+          req.accessToken
+        );
+
+        await Promise.all(
+          [
+            ...hooks,
+            ...bodies,
+            ...ctas
+          ].map(
+            file =>
+              fsp.rm(
+                file.path,
+                {
+                  force: true
+                }
+              ).catch(
+                () => {}
+              )
+          )
+        );
+
+        return res.status(400).json({
+          error:
+            "Envie pelo menos 1 vídeo em cada categoria."
+        });
+      }
+
+      /* ===================================================
+         CALCULA COMBINAÇÕES
+      =================================================== */
+
+      const total =
+        hooks.length *
+        bodies.length *
+        ctas.length;
+
+      if (
+        total >
+        MAX_COMBINATIONS
+      ) {
+        await deleteStorageObjectsBestEffort(
+          source.inputStoragePaths,
+          req.accessToken
+        );
+
+        await Promise.all(
+          [
+            ...hooks,
+            ...bodies,
+            ...ctas
+          ].map(
+            file =>
+              fsp.rm(
+                file.path,
+                {
+                  force: true
+                }
+              ).catch(
+                () => {}
+              )
+          )
+        );
+
+        return res.status(400).json({
+          error:
+            `Limite de ${MAX_COMBINATIONS} combinações por lote.`
+        });
+      }
+
+      /* ===================================================
+         RESERVA COTA
+      =================================================== */
+
+      const quota =
+        await reserveVideoQuota(
+          req.user.id,
+          req.accessToken,
+          total
+        );
+
+      if (!quota.allowed) {
+        await deleteStorageObjectsBestEffort(
+          source.inputStoragePaths,
+          req.accessToken
+        );
+
+        await Promise.all(
+          [
+            ...hooks,
+            ...bodies,
+            ...ctas
+          ].map(
+            file =>
+              fsp.rm(
+                file.path,
+                {
+                  force: true
+                }
+              ).catch(
+                () => {}
+              )
+          )
+        );
+
+        return res.status(403).json({
+          error:
+            quota.message ||
+            "Limite mensal de vídeos atingido.",
+
+          videosUsed:
+            quota.videosUsed,
+
+          monthlyLimit:
+            quota.monthlyLimit
+        });
+      }
+
+      /* ===================================================
+         CRIA PASTA DO JOB
+      =================================================== */
+
+      const dir =
+        path.join(
+          JOBS,
+          id
+        );
+
+      await fsp.mkdir(
+        dir,
+        {
+          recursive:
+            true
+        }
+      );
+
+      /* ===================================================
+         OBJETO DO JOB
+      =================================================== */
+
+      const job = {
+        id,
+
+        userId:
+          req.user.id,
+
+        accessToken:
+          req.accessToken,
+
+        status:
+          "processing",
+
+        total,
+
+        done:
+          0,
+
+        current:
+          "Iniciando…",
+
+        files:
+          [],
+
+        error:
+          null,
+
+        mode:
+          isJson
+            ? "storage-inputs"
+            : "multipart",
+
+        videosUsed:
+          quota.videosUsed,
+
+        monthlyLimit:
+          quota.monthlyLimit,
+
+        inputStoragePaths:
+          source.inputStoragePaths ||
+          [],
+
+        zip:
+          null
+      };
+
+      jobs.set(
+        id,
+        job
+      );
+
+      /* ===================================================
+         RESPONDE RÁPIDO
+      =================================================== */
+
+      res.json({
+        id,
+
+        total,
+
+        videosUsed:
+          quota.videosUsed,
+
+        monthlyLimit:
+          quota.monthlyLimit
+      });
+
+      /* ===================================================
+         INICIA PROCESSAMENTO
+      =================================================== */
+
+      void processJob(
+        job,
+        source
+      );
+
     } catch (error) {
       console.error(
-        "GeraMix: erro no processamento:",
+        "GeraMix: erro criando job:",
         error
       );
 
-      /*
-        Remove vídeos finais que já chegaram ao Storage.
-      */
-      for (
-        const storedFile
-        of job.files.filter(
-          file =>
-            file.stored &&
-            file.storagePath
-        )
-      ) {
-        try {
-          await deleteStorageObject(
-            storedFile.storagePath,
-            job.accessToken
-          );
-        } catch (cleanupError) {
-          console.error(
-            "GeraMix: erro removendo vídeo após falha:",
-            cleanupError
-          );
-        }
-      }
+      if (source) {
+        await deleteStorageObjectsBestEffort(
+          source.inputStoragePaths,
+          req.accessToken
+        );
 
-      /*
-        Remove registros do banco desse job.
-      */
-      try {
-        const response =
-          await fetch(
-            `${SUPABASE_URL}/rest/v1/downloads?job_id=eq.${encodeURIComponent(id)}&user_id=eq.${encodeURIComponent(req.user.id)}`,
-            {
-              method: "DELETE",
+        await Promise.all(
+          [
+            ...(source.hooks ||
+              []),
 
-              headers: {
-                Authorization:
-                  `Bearer ${req.accessToken}`,
+            ...(source.bodies ||
+              []),
 
-                apikey:
-                  SUPABASE_ANON_KEY
-              }
-            }
-          );
-
-        if (!response.ok) {
-          console.error(
-            "GeraMix: erro limpando registros do job.",
-            response.status
-          );
-        }
-      } catch (cleanupError) {
-        console.error(
-          "GeraMix: erro limpando registros:",
-          cleanupError
+            ...(source.ctas ||
+              [])
+          ].map(
+            file =>
+              fsp.rm(
+                file.path,
+                {
+                  force: true
+                }
+              ).catch(
+                () => {}
+              )
+          )
         );
       }
 
-      /*
-        Devolve toda a cota reservada.
-      */
-      await releaseVideoQuota(
-        req.user.id,
-        req.accessToken,
-        total
-      );
-
-      job.status =
-        "error";
-
-      job.error =
-        error?.message ||
-        "Erro desconhecido.";
-
-      job.current =
-        "Falhou";
+      return res.status(500).json({
+        error:
+          error?.message ||
+          "Não foi possível iniciar o processamento."
+      });
     }
-  })();
-}
+  }
+);
 
 /* =========================================================
    CONSULTA JOB
@@ -2463,480 +2634,259 @@ async function startJobProcessing({
 
 app.get(
   "/api/jobs/:id",
+
   requireAuth,
-  (req, res) => {
-    const job =
-      jobs.get(
-        req.params.id
+
+  async (
+    req,
+    res
+  ) => {
+    try {
+      let job =
+        jobs.get(
+          req.params.id
+        );
+
+      /* ================================================
+         NÃO ESTÁ NA MEMÓRIA:
+         TENTA RECUPERAR PELO SUPABASE
+      ================================================ */
+
+      if (!job) {
+        job =
+          await getPersistentJobFromDownloads(
+            req.params.id,
+            req.user.id,
+            req.accessToken
+          );
+
+        if (!job) {
+          return res.status(404).json({
+            error:
+              "Processamento não encontrado."
+          });
+        }
+
+        return res.json(
+          job
+        );
+      }
+
+      /* ================================================
+         GARANTE QUE O JOB É DO USUÁRIO
+      ================================================ */
+
+      if (
+        job.userId !==
+        req.user.id
+      ) {
+        return res.status(404).json({
+          error:
+            "Processamento não encontrado."
+        });
+      }
+
+      return res.json(
+        publicJob(job)
       );
 
-    if (!job) {
-      return res.status(404).json({
+    } catch (error) {
+      console.error(
+        "GeraMix: erro consultando job:",
+        error
+      );
+
+      return res.status(500).json({
         error:
-          "Processamento não encontrado."
+          "Não foi possível consultar o processamento."
       });
     }
+  }
+);
 
-    if (
-      job.userId !==
-      req.user.id
-    ) {
-      return res.status(404).json({
-        error:
-          "Processamento não encontrado."
-      });
+/* =========================================================
+   PREVIEW DOS VÍDEOS DO JOB
+   USA O STORAGE DIRETAMENTE
+========================================================= */
+
+app.get(
+  "/api/jobs/:id/video/:name",
+
+  requireAuth,
+
+  async (
+    req,
+    res
+  ) => {
+    try {
+      let job =
+        jobs.get(
+          req.params.id
+        );
+
+      if (!job) {
+        job =
+          await getPersistentJobFromDownloads(
+            req.params.id,
+            req.user.id,
+            req.accessToken
+          );
+      }
+
+      if (
+        !job ||
+        job.userId !==
+          req.user.id
+      ) {
+        return res.sendStatus(
+          404
+        );
+      }
+
+      const name =
+        safeName(
+          req.params.name
+        );
+
+      const file =
+        job.files.find(
+          item =>
+            safeName(
+              item.name
+            ) === name
+        );
+
+      if (
+        !file ||
+        !file.storagePath
+      ) {
+        return res.sendStatus(
+          404
+        );
+      }
+
+      return streamStoredFile(
+        {
+          file_name:
+            file.name,
+
+          storage_path:
+            file.storagePath
+        },
+
+        req,
+
+        res
+      );
+
+    } catch (error) {
+      console.error(
+        "GeraMix: erro no preview:",
+        error
+      );
+
+      return res.sendStatus(
+        500
+      );
     }
-
-    /*
-      Não devolvemos o accessToken para o navegador.
-    */
-    const response = {
-      ...job
-    };
-
-    delete response.accessToken;
-
-    res.json(
-      response
-    );
   }
 );
 
 /* =========================================================
    ZIP
+   USA OS VÍDEOS JÁ SALVOS NO STORAGE
+   NÃO REFAZ FFmpeg
 ========================================================= */
 
 app.get(
   "/api/jobs/:id/zip",
+
   requireAuth,
-  async (req, res) => {
-    const job =
-      jobs.get(
-        req.params.id
-      );
 
-    if (!job) {
-      return res
-        .status(404)
-        .send(
-          "Processamento não encontrado."
-        );
-    }
-
-    if (
-      job.userId !==
-      req.user.id
-    ) {
-      return res
-        .status(404)
-        .send(
-          "Processamento não encontrado."
-        );
-    }
-
-    if (
-      job.status !==
-      "done"
-    ) {
-      return res
-        .status(400)
-        .send(
-          "O processamento ainda não terminou."
-        );
-    }
-
-    res.statusCode =
-      200;
-
-    res.setHeader(
-      "Content-Type",
-      "application/zip"
-    );
-
-    res.setHeader(
-      "Content-Disposition",
-      'attachment; filename="geramix-videos.zip"'
-    );
-
-    const archive =
-      archiver(
-        "zip",
-        {
-          zlib: {
-            level: 0
-          }
-        }
-      );
-
-    archive.on(
-      "error",
-      error => {
-        console.error(
-          "Erro criando ZIP:",
-          error
-        );
-
-        if (!res.headersSent) {
-          res
-            .status(500)
-            .send(
-              "Erro ao criar ZIP."
-            );
-        } else {
-          res.destroy(
-            error
-          );
-        }
-      }
-    );
-
-    archive.pipe(
-      res
-    );
+  async (
+    req,
+    res
+  ) => {
+    let job;
 
     try {
-      for (
-        const file
-        of job.files
+      job =
+        jobs.get(
+          req.params.id
+        );
+
+      if (!job) {
+        job =
+          await getPersistentJobFromDownloads(
+            req.params.id,
+            req.user.id,
+            req.accessToken
+          );
+      }
+
+      if (
+        !job ||
+        job.userId !==
+          req.user.id
       ) {
-        const tempVideo =
-          await createVideoForJob(
-            job,
-            file
-          );
-
-        try {
-          archive.file(
-            tempVideo,
-            {
-              name:
-                file.name
-            }
-          );
-        } catch (error) {
-          await fsp.rm(
-            tempVideo,
-            {
-              force: true
-            }
-          );
-
-          throw error;
-        }
-      }
-
-      await archive.finalize();
-    } catch (error) {
-      console.error(
-        "Erro no download ZIP:",
-        error
-      );
-
-      if (!res.headersSent) {
         return res
-          .status(500)
+          .status(404)
           .send(
-            "Erro ao criar ZIP."
+            "Processamento não encontrado."
           );
       }
 
-      res.destroy(
-        error
-      );
-    }
-  }
-);
+      if (
+        job.status !==
+        "done"
+      ) {
+        return res
+          .status(400)
+          .send(
+            "O processamento ainda não terminou."
+          );
+      }
 
-/* =========================================================
-   PREVIEW DE VÍDEO DO JOB
-========================================================= */
-
-app.get(
-  "/api/jobs/:id/video/:name",
-  requireAuth,
-  async (req, res) => {
-    const job =
-      jobs.get(
-        req.params.id
-      );
-
-    if (!job) {
-      return res.sendStatus(
-        404
-      );
-    }
-
-    if (
-      job.userId !==
-      req.user.id
-    ) {
-      return res.sendStatus(
-        404
-      );
-    }
-
-    const name =
-      safeName(
-        req.params.name
-      );
-
-    const file =
-      job.files.find(
-        item =>
-          item.name ===
-          name
-      );
-
-    if (!file) {
-      return res.sendStatus(
-        404
-      );
-    }
-
-    let tempVideo =
-      null;
-
-    try {
-      tempVideo =
-        await createVideoForJob(
-          job,
-          file
-        );
-
-      const stat =
-        await fsp.stat(
-          tempVideo
-        );
-
-      const size =
-        stat.size;
-
-      const range =
-        req.headers.range;
+      res.statusCode =
+        200;
 
       res.setHeader(
         "Content-Type",
-        "video/mp4"
-      );
-
-      res.setHeader(
-        "Accept-Ranges",
-        "bytes"
-      );
-
-      res.setHeader(
-        "Cache-Control",
-        "no-store"
-      );
-
-      if (!range) {
-        res.setHeader(
-          "Content-Length",
-          size
-        );
-
-        res.setHeader(
-          "Content-Disposition",
-          `inline; filename="${name}"`
-        );
-
-        const stream =
-          fs.createReadStream(
-            tempVideo
-          );
-
-        stream.on(
-          "close",
-          () => {
-            fsp.rm(
-              tempVideo,
-              {
-                force: true
-              }
-            ).catch(
-              () => {}
-            );
-          }
-        );
-
-        stream.on(
-          "error",
-          error => {
-            console.error(
-              "Erro enviando vídeo:",
-              error
-            );
-
-            fsp.rm(
-              tempVideo,
-              {
-                force: true
-              }
-            ).catch(
-              () => {}
-            );
-
-            if (!res.headersSent) {
-              res.sendStatus(
-                500
-              );
-            } else {
-              res.destroy(
-                error
-              );
-            }
-          }
-        );
-
-        return stream.pipe(
-          res
-        );
-      }
-
-      const matches =
-        range.match(
-          /bytes=(\d*)-(\d*)/
-        );
-
-      if (!matches) {
-        await fsp.rm(
-          tempVideo,
-          {
-            force: true
-          }
-        );
-
-        return res
-          .status(416)
-          .set(
-            "Content-Range",
-            `bytes */${size}`
-          )
-          .end();
-      }
-
-      let start =
-        matches[1]
-          ? Number(matches[1])
-          : 0;
-
-      let end =
-        matches[2]
-          ? Number(matches[2])
-          : size - 1;
-
-      if (
-        !matches[1] &&
-        matches[2]
-      ) {
-        const suffixLength =
-          Number(matches[2]);
-
-        start =
-          Math.max(
-            0,
-            size -
-              suffixLength
-          );
-
-        end =
-          size - 1;
-      }
-
-      if (
-        start < 0 ||
-        start >= size ||
-        end < start
-      ) {
-        await fsp.rm(
-          tempVideo,
-          {
-            force: true
-          }
-        );
-
-        return res
-          .status(416)
-          .set(
-            "Content-Range",
-            `bytes */${size}`
-          )
-          .end();
-      }
-
-      end =
-        Math.min(
-          end,
-          size - 1
-        );
-
-      const chunkSize =
-        end -
-        start +
-        1;
-
-      res.statusCode =
-        206;
-
-      res.setHeader(
-        "Content-Range",
-        `bytes ${start}-${end}/${size}`
-      );
-
-      res.setHeader(
-        "Content-Length",
-        chunkSize
+        "application/zip"
       );
 
       res.setHeader(
         "Content-Disposition",
-        `inline; filename="${name}"`
+        'attachment; filename="geramix-videos.zip"'
       );
 
-      const stream =
-        fs.createReadStream(
-          tempVideo,
+      const archive =
+        archiver(
+          "zip",
           {
-            start,
-            end
+            zlib: {
+              level:
+                0
+            }
           }
         );
 
-      stream.on(
-        "close",
-        () => {
-          fsp.rm(
-            tempVideo,
-            {
-              force: true
-            }
-          ).catch(
-            () => {}
-          );
-        }
-      );
-
-      stream.on(
+      archive.on(
         "error",
         error => {
           console.error(
-            "Erro enviando trecho:",
+            "GeraMix: erro criando ZIP:",
             error
           );
 
-          fsp.rm(
-            tempVideo,
-            {
-              force: true
-            }
-          ).catch(
-            () => {}
-          );
-
-          if (!res.headersSent) {
-            res.sendStatus(
-              500
-            );
+          if (
+            !res.headersSent
+          ) {
+            res
+              .status(
+                500
+              )
+              .end();
           } else {
             res.destroy(
               error
@@ -2945,31 +2895,67 @@ app.get(
         }
       );
 
-      stream.pipe(
+      archive.pipe(
         res
       );
-    } catch (error) {
-      if (tempVideo) {
-        await fsp.rm(
-          tempVideo,
+
+      /* ================================================
+         PEGA CADA VÍDEO DIRETO DO STORAGE
+      ================================================ */
+
+      for (
+        const file of
+        job.files
+      ) {
+        if (
+          !file.storagePath
+        ) {
+          continue;
+        }
+
+        const response =
+          await fetchStorageObject(
+            file.storagePath,
+            req.accessToken
+          );
+
+        if (
+          !response.ok ||
+          !response.body
+        ) {
+          throw new Error(
+            `Não foi possível ler ${file.name} do Storage (${response.status}).`
+          );
+        }
+
+        archive.append(
+          Readable.fromWeb(
+            response.body
+          ),
           {
-            force: true
+            name:
+              file.name
           }
-        ).catch(
-          () => {}
         );
       }
 
+      await archive.finalize();
+
+    } catch (error) {
       console.error(
-        "Erro montando vídeo:",
+        "GeraMix: erro no download ZIP:",
         error
       );
 
-      if (!res.headersSent) {
+      if (
+        !res.headersSent
+      ) {
         return res
-          .status(500)
+          .status(
+            500
+          )
           .send(
-            "Erro ao montar o vídeo."
+            "Erro ao criar ZIP."
           );
       }
 
@@ -2987,7 +2973,7 @@ app.get(
 app.use(
   (
     error,
-    req,
+    _req,
     res,
     next
   ) => {
@@ -2996,20 +2982,19 @@ app.use(
       multer.MulterError
     ) {
       console.error(
-        "Erro Multer:",
+        "GeraMix: erro Multer:",
         error
       );
 
       return res.status(400).json({
         error:
-          "Erro no envio dos vídeos: " +
-          error.message
+          `Erro no envio dos vídeos: ${error.message}`
       });
     }
 
     if (error) {
       console.error(
-        "Erro no servidor:",
+        "GeraMix: erro no servidor:",
         error
       );
 
@@ -3037,6 +3022,10 @@ app.listen(
 
     console.log(
       `FFmpeg simultâneos: ${FFMPEG_CONCURRENCY}`
+    );
+
+    console.log(
+      `Máximo de combinações: ${MAX_COMBINATIONS}`
     );
   }
 );
