@@ -9,6 +9,7 @@ import { spawn } from "child_process";
 import { Readable } from "stream";
 import archiver from "archiver";
 import ffmpegPath from "ffmpeg-static";
+import { waitUntil } from "@vercel/functions";
 
 const app = express();
 
@@ -23,53 +24,31 @@ const UPLOADS = path.join(BASE, "uploads");
 const JOBS = path.join(BASE, "jobs");
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
-const SUPABASE_ANON_KEY =
-  process.env.SUPABASE_ANON_KEY;
+const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY;
 
-const SUPABASE_DOWNLOAD_BUCKET =
-  "geramix-downloads";
+const SUPABASE_DOWNLOAD_BUCKET = "geramix-downloads";
 
 const MAX_COMBINATIONS = 150;
 const MAX_HOOKS = 5;
 const MAX_BODIES = 5;
 const MAX_CTAS = 6;
 
-const MAX_FILE_SIZE =
-  200 * 1024 * 1024;
+const MAX_FILE_SIZE = 200 * 1024 * 1024;
 
-/*
- * TEMPOS MÁXIMOS
- */
+const FFMPEG_TIMEOUT = 10 * 60 * 1000;
+const STORAGE_UPLOAD_TIMEOUT = 15 * 60 * 1000;
+const STORAGE_DOWNLOAD_TIMEOUT = 15 * 60 * 1000;
+const DATABASE_TIMEOUT = 60 * 1000;
 
-const FFMPEG_TIMEOUT =
-  10 * 60 * 1000;
-
-const STORAGE_UPLOAD_TIMEOUT =
-  15 * 60 * 1000;
-
-const STORAGE_DOWNLOAD_TIMEOUT =
-  15 * 60 * 1000;
-
-const DATABASE_TIMEOUT =
-  60 * 1000;
-
-if (
-  !SUPABASE_URL ||
-  !SUPABASE_ANON_KEY
-) {
+if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
   throw new Error(
     "SUPABASE_URL e SUPABASE_ANON_KEY precisam estar configuradas."
   );
 }
 
 await Promise.all([
-  fsp.mkdir(UPLOADS, {
-    recursive: true
-  }),
-
-  fsp.mkdir(JOBS, {
-    recursive: true
-  })
+  fsp.mkdir(UPLOADS, { recursive: true }),
+  fsp.mkdir(JOBS, { recursive: true })
 ]);
 
 app.use(express.static(PUBLIC));
@@ -79,17 +58,11 @@ app.use(express.static(PUBLIC));
 ========================================================= */
 
 app.get("/api/config", (_, res) => {
-  res.setHeader(
-    "Cache-Control",
-    "no-store"
-  );
+  res.setHeader("Cache-Control", "no-store");
 
   res.json({
-    supabaseUrl:
-      SUPABASE_URL,
-
-    supabaseAnonKey:
-      SUPABASE_ANON_KEY
+    supabaseUrl: SUPABASE_URL,
+    supabaseAnonKey: SUPABASE_ANON_KEY
   });
 });
 
@@ -119,7 +92,7 @@ const upload = multer({
 });
 
 /* =========================================================
-   MEMÓRIA APENAS PARA O JOB ATIVO
+   MEMÓRIA DOS JOBS
 ========================================================= */
 
 const jobs = new Map();
@@ -129,24 +102,15 @@ const jobs = new Map();
 ========================================================= */
 
 function safeName(name) {
-  return String(
-    name || "video.mp4"
-  )
-    .replace(
-      /[^a-zA-Z0-9._-]/g,
-      "_"
-    )
+  return String(name || "video.mp4")
+    .replace(/[^a-zA-Z0-9._-]/g, "_")
     .slice(-100);
 }
 
-function encodedStoragePath(
-  storagePath
-) {
+function encodedStoragePath(storagePath) {
   return String(storagePath)
     .split("/")
-    .map(
-      encodeURIComponent
-    )
+    .map(encodeURIComponent)
     .join("/");
 }
 
@@ -159,41 +123,23 @@ async function fetchWithTimeout(
   options = {},
   timeoutMs = 0
 ) {
-  if (
-    !timeoutMs ||
-    timeoutMs <= 0
-  ) {
-    return fetch(
-      url,
-      options
-    );
+  if (!timeoutMs || timeoutMs <= 0) {
+    return fetch(url, options);
   }
 
-  const controller =
-    new AbortController();
+  const controller = new AbortController();
 
-  const timer =
-    setTimeout(
-      () => {
-        controller.abort();
-      },
-      timeoutMs
-    );
+  const timer = setTimeout(() => {
+    controller.abort();
+  }, timeoutMs);
 
   try {
-    return await fetch(
-      url,
-      {
-        ...options,
-        signal:
-          controller.signal
-      }
-    );
+    return await fetch(url, {
+      ...options,
+      signal: controller.signal
+    });
   } catch (error) {
-    if (
-      error?.name ===
-      "AbortError"
-    ) {
+    if (error?.name === "AbortError") {
       throw new Error(
         `Tempo limite atingido após ${Math.round(
           timeoutMs / 60000
@@ -211,73 +157,51 @@ async function fetchWithTimeout(
    AUTENTICAÇÃO
 ========================================================= */
 
-async function requireAuth(
-  req,
-  res,
-  next
-) {
+async function requireAuth(req, res, next) {
   try {
-    const authorization =
-      String(
-        req.headers.authorization ||
-          ""
-      ).trim();
+    const authorization = String(
+      req.headers.authorization || ""
+    ).trim();
 
     let token =
       authorization
         .toLowerCase()
         .startsWith("bearer ")
-        ? authorization
-            .slice(7)
-            .trim()
+        ? authorization.slice(7).trim()
         : "";
 
     if (!token) {
-      token =
-        String(
-          req.query.token || ""
-        ).trim();
+      token = String(req.query.token || "").trim();
     }
 
-    if (
-      !token ||
-      token.startsWith("sb_")
-    ) {
+    if (!token || token.startsWith("sb_")) {
       return res.status(401).json({
-        error:
-          "Sessão inválida ou não enviada."
+        error: "Sessão inválida ou não enviada."
       });
     }
 
-    const response =
-      await fetchWithTimeout(
-        `${SUPABASE_URL}/auth/v1/user`,
-        {
-          headers: {
-            Authorization:
-              `Bearer ${token}`,
-
-            apikey:
-              SUPABASE_ANON_KEY
-          }
-        },
-        DATABASE_TIMEOUT
-      );
+    const response = await fetchWithTimeout(
+      `${SUPABASE_URL}/auth/v1/user`,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          apikey: SUPABASE_ANON_KEY
+        }
+      },
+      DATABASE_TIMEOUT
+    );
 
     if (!response.ok) {
       return res.status(401).json({
-        error:
-          "Sessão inválida ou expirada."
+        error: "Sessão inválida ou expirada."
       });
     }
 
-    const user =
-      await response.json();
+    const user = await response.json();
 
     if (!user?.id) {
       return res.status(401).json({
-        error:
-          "Sessão inválida ou expirada."
+        error: "Sessão inválida ou expirada."
       });
     }
 
@@ -286,14 +210,10 @@ async function requireAuth(
 
     next();
   } catch (error) {
-    console.error(
-      "GeraMix auth:",
-      error
-    );
+    console.error("GeraMix auth:", error);
 
     return res.status(401).json({
-      error:
-        "Não foi possível validar sua sessão."
+      error: "Não foi possível validar sua sessão."
     });
   }
 }
@@ -310,12 +230,8 @@ async function supabaseRequest(
 ) {
   const headers = {
     ...(options.headers || {}),
-
-    Authorization:
-      `Bearer ${accessToken}`,
-
-    apikey:
-      SUPABASE_ANON_KEY
+    Authorization: `Bearer ${accessToken}`,
+    apikey: SUPABASE_ANON_KEY
   };
 
   return fetchWithTimeout(
@@ -329,17 +245,14 @@ async function supabaseRequest(
 }
 
 /* =========================================================
-   LÊ ERRO DO SUPABASE
+   ERRO DO SUPABASE
 ========================================================= */
 
-async function getResponseError(
-  response
-) {
+async function getResponseError(response) {
   let text = "";
 
   try {
-    text =
-      await response.text();
+    text = await response.text();
   } catch {
     return "";
   }
@@ -349,8 +262,7 @@ async function getResponseError(
   }
 
   try {
-    const data =
-      JSON.parse(text);
+    const data = JSON.parse(text);
 
     return (
       data?.message ||
@@ -370,38 +282,29 @@ async function getResponseError(
    RPC
 ========================================================= */
 
-async function rpc(
-  name,
-  body,
-  accessToken
-) {
-  const response =
-    await supabaseRequest(
-      `${SUPABASE_URL}/rest/v1/rpc/${name}`,
-      {
-        method: "POST",
+async function rpc(name, body, accessToken) {
+  const response = await supabaseRequest(
+    `${SUPABASE_URL}/rest/v1/rpc/${name}`,
+    {
+      method: "POST",
 
-        headers: {
-          "Content-Type":
-            "application/json"
-        },
-
-        body:
-          JSON.stringify(body)
+      headers: {
+        "Content-Type": "application/json"
       },
-      accessToken,
-      DATABASE_TIMEOUT
-    );
 
-  const text =
-    await response.text();
+      body: JSON.stringify(body)
+    },
+    accessToken,
+    DATABASE_TIMEOUT
+  );
+
+  const text = await response.text();
 
   let data = null;
 
   if (text) {
     try {
-      data =
-        JSON.parse(text);
+      data = JSON.parse(text);
     } catch {
       data = text;
     }
@@ -413,17 +316,13 @@ async function rpc(
         data?.msg ||
         data?.error_description ||
         data?.error ||
-        (
-          typeof data === "string"
-            ? data
-            : `RPC ${name} falhou com HTTP ${response.status}.`
-        )
+        (typeof data === "string"
+          ? data
+          : `RPC ${name} falhou com HTTP ${response.status}.`)
     );
   }
 
-  return Array.isArray(data)
-    ? data[0]
-    : data;
+  return Array.isArray(data) ? data[0] : data;
 }
 
 /* =========================================================
@@ -435,18 +334,14 @@ async function reserveVideoQuota(
   accessToken,
   amount
 ) {
-  const result =
-    await rpc(
-      "reserve_video_quota",
-      {
-        p_user_id:
-          userId,
-
-        p_amount:
-          amount
-      },
-      accessToken
-    );
+  const result = await rpc(
+    "reserve_video_quota",
+    {
+      p_user_id: userId,
+      p_amount: amount
+    },
+    accessToken
+  );
 
   if (!result) {
     throw new Error(
@@ -455,21 +350,17 @@ async function reserveVideoQuota(
   }
 
   return {
-    allowed:
-      Boolean(result.allowed),
+    allowed: Boolean(result.allowed),
 
-    videosUsed:
-      Number(
-        result.videos_used || 0
-      ),
+    videosUsed: Number(
+      result.videos_used || 0
+    ),
 
-    monthlyLimit:
-      Number(
-        result.monthly_limit || 0
-      ),
+    monthlyLimit: Number(
+      result.monthly_limit || 0
+    ),
 
-    message:
-      result.message || ""
+    message: result.message || ""
   };
 }
 
@@ -486,11 +377,8 @@ async function releaseVideoQuota(
     await rpc(
       "release_video_quota",
       {
-        p_user_id:
-          userId,
-
-        p_amount:
-          amount
+        p_user_id: userId,
+        p_amount: amount
       },
       accessToken
     );
@@ -510,62 +398,35 @@ async function createPersistentJob(
   job,
   accessToken
 ) {
-  const response =
-    await supabaseRequest(
-      `${SUPABASE_URL}/rest/v1/jobs`,
-      {
-        method: "POST",
+  const response = await supabaseRequest(
+    `${SUPABASE_URL}/rest/v1/jobs`,
+    {
+      method: "POST",
 
-        headers: {
-          "Content-Type":
-            "application/json",
-
-          Prefer:
-            "return=representation"
-        },
-
-        body:
-          JSON.stringify({
-            id:
-              job.id,
-
-            user_id:
-              job.userId,
-
-            status:
-              job.status,
-
-            total:
-              job.total,
-
-            done:
-              job.done,
-
-            current:
-              job.current,
-
-            error:
-              job.error,
-
-            mode:
-              job.mode,
-
-            videos_used:
-              job.videosUsed,
-
-            monthly_limit:
-              job.monthlyLimit
-          })
+      headers: {
+        "Content-Type": "application/json",
+        Prefer: "return=representation"
       },
-      accessToken,
-      DATABASE_TIMEOUT
-    );
+
+      body: JSON.stringify({
+        id: job.id,
+        user_id: job.userId,
+        status: job.status,
+        total: job.total,
+        done: job.done,
+        current: job.current,
+        error: job.error,
+        mode: job.mode,
+        videos_used: job.videosUsed,
+        monthly_limit: job.monthlyLimit
+      })
+    },
+    accessToken,
+    DATABASE_TIMEOUT
+  );
 
   if (!response.ok) {
-    const detail =
-      await getResponseError(
-        response
-      );
+    const detail = await getResponseError(response);
 
     throw new Error(
       detail ||
@@ -573,22 +434,17 @@ async function createPersistentJob(
     );
   }
 
-  const text =
-    await response.text();
+  const text = await response.text();
 
   let rows = [];
 
   if (text) {
     try {
-      rows =
-        JSON.parse(text);
+      rows = JSON.parse(text);
     } catch {}
   }
 
-  if (
-    !Array.isArray(rows) ||
-    !rows.length
-  ) {
+  if (!Array.isArray(rows) || !rows.length) {
     throw new Error(
       "O processamento foi enviado, mas o Supabase não confirmou a criação do job."
     );
@@ -603,63 +459,39 @@ async function updatePersistentJob(
   extra = {}
 ) {
   const body = {
-    status:
-      job.status,
-
-    total:
-      job.total,
-
-    done:
-      job.done,
-
-    current:
-      job.current,
-
-    error:
-      job.error,
-
-    mode:
-      job.mode,
-
-    videos_used:
-      job.videosUsed,
-
-    monthly_limit:
-      job.monthlyLimit,
-
+    status: job.status,
+    total: job.total,
+    done: job.done,
+    current: job.current,
+    error: job.error,
+    mode: job.mode,
+    videos_used: job.videosUsed,
+    monthly_limit: job.monthlyLimit,
     ...extra
   };
 
-  const response =
-    await supabaseRequest(
-      `${SUPABASE_URL}/rest/v1/jobs?id=eq.${encodeURIComponent(
-        job.id
-      )}&user_id=eq.${encodeURIComponent(
-        job.userId
-      )}`,
-      {
-        method: "PATCH",
+  const response = await supabaseRequest(
+    `${SUPABASE_URL}/rest/v1/jobs?id=eq.${encodeURIComponent(
+      job.id
+    )}&user_id=eq.${encodeURIComponent(
+      job.userId
+    )}`,
+    {
+      method: "PATCH",
 
-        headers: {
-          "Content-Type":
-            "application/json",
-
-          Prefer:
-            "return=representation"
-        },
-
-        body:
-          JSON.stringify(body)
+      headers: {
+        "Content-Type": "application/json",
+        Prefer: "return=representation"
       },
-      accessToken,
-      DATABASE_TIMEOUT
-    );
+
+      body: JSON.stringify(body)
+    },
+    accessToken,
+    DATABASE_TIMEOUT
+  );
 
   if (!response.ok) {
-    const detail =
-      await getResponseError(
-        response
-      );
+    const detail = await getResponseError(response);
 
     throw new Error(
       detail ||
@@ -667,22 +499,17 @@ async function updatePersistentJob(
     );
   }
 
-  const text =
-    await response.text();
+  const text = await response.text();
 
   let rows = [];
 
   if (text) {
     try {
-      rows =
-        JSON.parse(text);
+      rows = JSON.parse(text);
     } catch {}
   }
 
-  if (
-    !Array.isArray(rows) ||
-    !rows.length
-  ) {
+  if (!Array.isArray(rows) || !rows.length) {
     throw new Error(
       "O Supabase não confirmou a atualização do job."
     );
@@ -696,29 +523,19 @@ async function getPersistentJobRow(
   userId,
   accessToken
 ) {
-  const response =
-    await supabaseRequest(
-      `${SUPABASE_URL}/rest/v1/jobs?id=eq.${encodeURIComponent(
-        id
-      )}&user_id=eq.${encodeURIComponent(
-        userId
-      )}&limit=1`,
-      {},
-      accessToken,
-      DATABASE_TIMEOUT
-    );
-
-  /*
-   * IMPORTANTE:
-   * HTTP diferente de 2xx agora NÃO é tratado
-   * como se o job simplesmente não existisse.
-   */
+  const response = await supabaseRequest(
+    `${SUPABASE_URL}/rest/v1/jobs?id=eq.${encodeURIComponent(
+      id
+    )}&user_id=eq.${encodeURIComponent(
+      userId
+    )}&limit=1`,
+    {},
+    accessToken,
+    DATABASE_TIMEOUT
+  );
 
   if (!response.ok) {
-    const detail =
-      await getResponseError(
-        response
-      );
+    const detail = await getResponseError(response);
 
     throw new Error(
       detail ||
@@ -726,8 +543,7 @@ async function getPersistentJobRow(
     );
   }
 
-  const text =
-    await response.text();
+  const text = await response.text();
 
   if (!text) {
     return null;
@@ -736,8 +552,7 @@ async function getPersistentJobRow(
   let rows;
 
   try {
-    rows =
-      JSON.parse(text);
+    rows = JSON.parse(text);
   } catch {
     throw new Error(
       "O Supabase retornou uma resposta inválida ao consultar o job."
@@ -758,142 +573,101 @@ function runFFmpeg(
   cwd,
   timeoutMs = FFMPEG_TIMEOUT
 ) {
-  return new Promise(
-    (resolve, reject) => {
-      const child =
-        spawn(
-          ffmpegPath,
-          [
-            "-hide_banner",
-            "-loglevel",
-            "error",
-            "-threads",
-            "1",
-            ...args
-          ],
-          {
-            cwd
-          }
-        );
-
-      let stderr = "";
-      let finished = false;
-
-      let timer;
-
-      const finishError =
-        error => {
-          if (finished) {
-            return;
-          }
-
-          finished = true;
-
-          clearTimeout(
-            timer
-          );
-
-          reject(error);
-        };
-
-      const finishSuccess =
-        () => {
-          if (finished) {
-            return;
-          }
-
-          finished = true;
-
-          clearTimeout(
-            timer
-          );
-
-          resolve();
-        };
-
-      child.stderr.on(
-        "data",
-        data => {
-          stderr +=
-            data.toString();
-
-          if (
-            stderr.length >
-            12000
-          ) {
-            stderr =
-              stderr.slice(-12000);
-          }
-        }
-      );
-
-      child.on(
+  return new Promise((resolve, reject) => {
+    const child = spawn(
+      ffmpegPath,
+      [
+        "-hide_banner",
+        "-loglevel",
         "error",
-        finishError
-      );
+        "-threads",
+        "1",
+        ...args
+      ],
+      {
+        cwd
+      }
+    );
 
-      child.on(
-        "close",
-        code => {
-          if (code === 0) {
-            finishSuccess();
-          } else {
-            finishError(
-              new Error(
-                stderr.trim() ||
-                  `FFmpeg saiu com código ${code}.`
-              )
-            );
-          }
-        }
-      );
+    let stderr = "";
+    let finished = false;
+    let timer;
 
-      timer =
-        setTimeout(
-          () => {
-            try {
-              child.kill(
-                "SIGKILL"
-              );
-            } catch {}
+    const finishError = error => {
+      if (finished) {
+        return;
+      }
 
-            finishError(
-              new Error(
-                `FFmpeg ultrapassou o tempo limite de ${Math.round(
-                  timeoutMs / 60000
-                )} minutos.`
-              )
-            );
-          },
-          timeoutMs
+      finished = true;
+      clearTimeout(timer);
+      reject(error);
+    };
+
+    const finishSuccess = () => {
+      if (finished) {
+        return;
+      }
+
+      finished = true;
+      clearTimeout(timer);
+      resolve();
+    };
+
+    child.stderr.on("data", data => {
+      stderr += data.toString();
+
+      if (stderr.length > 12000) {
+        stderr = stderr.slice(-12000);
+      }
+    });
+
+    child.on("error", finishError);
+
+    child.on("close", code => {
+      if (code === 0) {
+        finishSuccess();
+      } else {
+        finishError(
+          new Error(
+            stderr.trim() ||
+              `FFmpeg saiu com código ${code}.`
+          )
         );
-    }
-  );
+      }
+    });
+
+    timer = setTimeout(() => {
+      try {
+        child.kill("SIGKILL");
+      } catch {}
+
+      finishError(
+        new Error(
+          `FFmpeg ultrapassou o tempo limite de ${Math.round(
+            timeoutMs / 60000
+          )} minutos.`
+        )
+      );
+    }, timeoutMs);
+  });
 }
 
 /* =========================================================
    ÁUDIO
 ========================================================= */
 
-async function hasAudio(
-  input,
-  cwd
-) {
+async function hasAudio(input, cwd) {
   try {
     await runFFmpeg(
       [
         "-i",
         input,
-
         "-map",
         "0:a:0",
-
         "-frames:a",
         "1",
-
         "-f",
         "null",
-
         "-"
       ],
       cwd
@@ -914,11 +688,10 @@ async function normalizeVideo(
   output,
   cwd
 ) {
-  const audio =
-    await hasAudio(
-      input,
-      cwd
-    );
+  const audio = await hasAudio(
+    input,
+    cwd
+  );
 
   const args = [
     "-i",
@@ -929,7 +702,6 @@ async function normalizeVideo(
     args.push(
       "-f",
       "lavfi",
-
       "-i",
       "anullsrc=r=48000:cl=stereo"
     );
@@ -940,9 +712,7 @@ async function normalizeVideo(
     "0:v:0",
 
     "-map",
-    audio
-      ? "0:a:0"
-      : "1:a:0",
+    audio ? "0:a:0" : "1:a:0",
 
     "-vf",
     "scale=720:1280:force_original_aspect_ratio=decrease," +
@@ -999,25 +769,20 @@ async function concatNormalized(
   output,
   cwd
 ) {
-  const listFile =
-    path.join(
-      cwd,
-      `concat-${crypto.randomUUID()}.txt`
-    );
+  const listFile = path.join(
+    cwd,
+    `concat-${crypto.randomUUID()}.txt`
+  );
 
-  const content =
-    files
-      .map(file => {
-        const base =
-          path.basename(file)
-            .replace(
-              /'/g,
-              "'\\''"
-            );
+  const content = files
+    .map(file => {
+      const base = path
+        .basename(file)
+        .replace(/'/g, "'\\''");
 
-        return `file '${base}'`;
-      })
-      .join("\n");
+      return `file '${base}'`;
+    })
+    .join("\n");
 
   await fsp.writeFile(
     listFile,
@@ -1072,31 +837,19 @@ function originality(
 
   let different = 0;
 
-  if (
-    current.hook !==
-    previous.hook
-  ) {
+  if (current.hook !== previous.hook) {
     different++;
   }
 
-  if (
-    current.body !==
-    previous.body
-  ) {
+  if (current.body !== previous.body) {
     different++;
   }
 
-  if (
-    current.cta !==
-    previous.cta
-  ) {
+  if (current.cta !== previous.cta) {
     different++;
   }
 
-  return (
-    70 +
-    different * 10
-  );
+  return 70 + different * 10;
 }
 
 /* =========================================================
@@ -1108,24 +861,17 @@ async function downloadStorageObject(
   accessToken,
   outputPath
 ) {
-  const response =
-    await supabaseRequest(
-      `${SUPABASE_URL}/storage/v1/object/${SUPABASE_DOWNLOAD_BUCKET}/${encodedStoragePath(
-        storagePath
-      )}`,
-      {},
-      accessToken,
-      STORAGE_DOWNLOAD_TIMEOUT
-    );
+  const response = await supabaseRequest(
+    `${SUPABASE_URL}/storage/v1/object/${SUPABASE_DOWNLOAD_BUCKET}/${encodedStoragePath(
+      storagePath
+    )}`,
+    {},
+    accessToken,
+    STORAGE_DOWNLOAD_TIMEOUT
+  );
 
-  if (
-    !response.ok ||
-    !response.body
-  ) {
-    const detail =
-      await getResponseError(
-        response
-      );
+  if (!response.ok || !response.body) {
+    const detail = await getResponseError(response);
 
     throw new Error(
       detail ||
@@ -1133,65 +879,43 @@ async function downloadStorageObject(
     );
   }
 
-  const output =
-    fs.createWriteStream(
-      outputPath
+  const output = fs.createWriteStream(
+    outputPath
+  );
+
+  await new Promise((resolve, reject) => {
+    const source = Readable.fromWeb(
+      response.body
     );
 
-  await new Promise(
-    (resolve, reject) => {
-      const source =
-        Readable.fromWeb(
-          response.body
-        );
+    source.on("error", reject);
+    output.on("error", reject);
+    output.on("finish", resolve);
 
-      source.on(
-        "error",
-        reject
-      );
-
-      output.on(
-        "error",
-        reject
-      );
-
-      output.on(
-        "finish",
-        resolve
-      );
-
-      source.pipe(
-        output
-      );
-    }
-  );
+    source.pipe(output);
+  });
 }
 
 async function deleteStorageObject(
   storagePath,
   accessToken
 ) {
-  const response =
-    await supabaseRequest(
-      `${SUPABASE_URL}/storage/v1/object/${SUPABASE_DOWNLOAD_BUCKET}/${encodedStoragePath(
-        storagePath
-      )}`,
-      {
-        method:
-          "DELETE"
-      },
-      accessToken,
-      DATABASE_TIMEOUT
-    );
+  const response = await supabaseRequest(
+    `${SUPABASE_URL}/storage/v1/object/${SUPABASE_DOWNLOAD_BUCKET}/${encodedStoragePath(
+      storagePath
+    )}`,
+    {
+      method: "DELETE"
+    },
+    accessToken,
+    DATABASE_TIMEOUT
+  );
 
   if (
     !response.ok &&
     response.status !== 404
   ) {
-    const detail =
-      await getResponseError(
-        response
-      );
+    const detail = await getResponseError(response);
 
     throw new Error(
       detail ||
@@ -1239,23 +963,17 @@ function validateStorageInputs(
         );
       }
 
-      if (
-        list.length > max
-      ) {
+      if (list.length > max) {
         throw new Error(
           `Limite excedido para ${field}.`
         );
       }
 
       return list.map(
-        (
-          item,
-          index
-        ) => {
+        (item, index) => {
           const storagePath =
             String(
-              item?.storagePath ||
-                ""
+              item?.storagePath || ""
             ).trim();
 
           const originalName =
@@ -1280,12 +998,8 @@ function validateStorageInputs(
 
           return {
             storagePath,
-
-            originalname:
-              originalName,
-
-            path:
-              null
+            originalname: originalName,
+            path: null
           };
         }
       );
@@ -1309,52 +1023,30 @@ async function registerDownload({
     `[GeraMix] Registrando download: job=${jobId}, arquivo=${fileName}`
   );
 
-  const response =
-    await supabaseRequest(
-      `${SUPABASE_URL}/rest/v1/downloads`,
-      {
-        method: "POST",
+  const response = await supabaseRequest(
+    `${SUPABASE_URL}/rest/v1/downloads`,
+    {
+      method: "POST",
 
-        headers: {
-          "Content-Type":
-            "application/json",
-
-          /*
-           * return=representation é importante:
-           * agora o Supabase precisa confirmar
-           * que a linha realmente foi criada.
-           */
-          Prefer:
-            "return=representation"
-        },
-
-        body:
-          JSON.stringify({
-            user_id:
-              userId,
-
-            job_id:
-              jobId,
-
-            file_name:
-              fileName,
-
-            storage_path:
-              storagePath,
-
-            originality:
-              originalityScore
-          })
+      headers: {
+        "Content-Type": "application/json",
+        Prefer: "return=representation"
       },
-      accessToken,
-      DATABASE_TIMEOUT
-    );
+
+      body: JSON.stringify({
+        user_id: userId,
+        job_id: jobId,
+        file_name: fileName,
+        storage_path: storagePath,
+        originality: originalityScore
+      })
+    },
+    accessToken,
+    DATABASE_TIMEOUT
+  );
 
   if (!response.ok) {
-    const detail =
-      await getResponseError(
-        response
-      );
+    const detail = await getResponseError(response);
 
     throw new Error(
       detail ||
@@ -1362,15 +1054,13 @@ async function registerDownload({
     );
   }
 
-  const text =
-    await response.text();
+  const text = await response.text();
 
   let rows = [];
 
   if (text) {
     try {
-      rows =
-        JSON.parse(text);
+      rows = JSON.parse(text);
     } catch {
       throw new Error(
         "O Supabase respondeu ao registro do vídeo com um formato inválido."
@@ -1400,19 +1090,17 @@ async function uploadVideoToStorage(
   storagePath,
   accessToken
 ) {
-  const stat =
-    await fsp.stat(
-      localPath
-    );
+  const stat = await fsp.stat(
+    localPath
+  );
 
   console.log(
     `[GeraMix] Enviando Storage: ${storagePath} (${stat.size} bytes)`
   );
 
-  const stream =
-    fs.createReadStream(
-      localPath
-    );
+  const stream = fs.createReadStream(
+    localPath
+  );
 
   try {
     const response =
@@ -1424,21 +1112,17 @@ async function uploadVideoToStorage(
           method: "POST",
 
           headers: {
-            "Content-Type":
-              "video/mp4",
+            "Content-Type": "video/mp4",
 
             "Content-Length":
               String(stat.size),
 
-            "x-upsert":
-              "false"
+            "x-upsert": "false"
           },
 
-          body:
-            stream,
+          body: stream,
 
-          duplex:
-            "half"
+          duplex: "half"
         },
         accessToken,
         STORAGE_UPLOAD_TIMEOUT
@@ -1446,9 +1130,7 @@ async function uploadVideoToStorage(
 
     if (!response.ok) {
       const detail =
-        await getResponseError(
-          response
-        );
+        await getResponseError(response);
 
       throw new Error(
         detail ||
@@ -1486,22 +1168,20 @@ async function createAndStoreDownload(
   accessToken,
   onStage
 ) {
-  const dir =
-    path.join(
-      JOBS,
-      job.id
-    );
+  const dir = path.join(
+    JOBS,
+    job.id
+  );
 
-  const output =
-    path.join(
-      dir,
-      `assembled-${String(
-        file.index
-      ).padStart(
-        3,
-        "0"
-      )}-${crypto.randomUUID()}.mp4`
-    );
+  const output = path.join(
+    dir,
+    `assembled-${String(
+      file.index
+    ).padStart(
+      3,
+      "0"
+    )}-${crypto.randomUUID()}.mp4`
+  );
 
   const sources = [
     path.join(
@@ -1535,14 +1215,9 @@ async function createAndStoreDownload(
     )
   ];
 
-  let uploadedStoragePath =
-    null;
+  let uploadedStoragePath = null;
 
   try {
-    /* -----------------------------------------------------
-       ETAPA 1
-    ----------------------------------------------------- */
-
     await onStage?.(
       `Montando vídeo ${file.index}/${job.total}…`
     );
@@ -1552,10 +1227,6 @@ async function createAndStoreDownload(
       output,
       dir
     );
-
-    /* -----------------------------------------------------
-       ETAPA 2
-    ----------------------------------------------------- */
 
     await onStage?.(
       `Enviando vídeo ${file.index}/${job.total}…`
@@ -1577,10 +1248,6 @@ async function createAndStoreDownload(
     uploadedStoragePath =
       storagePath;
 
-    /* -----------------------------------------------------
-       ETAPA 3
-    ----------------------------------------------------- */
-
     await onStage?.(
       `Registrando vídeo ${file.index}/${job.total}…`
     );
@@ -1591,20 +1258,12 @@ async function createAndStoreDownload(
 
     try {
       await registerDownload({
-        userId:
-          job.userId,
-
-        jobId:
-          job.id,
-
-        fileName:
-          file.name,
-
+        userId: job.userId,
+        jobId: job.id,
+        fileName: file.name,
         storagePath,
-
         originalityScore:
           file.originality,
-
         accessToken
       });
     } catch (error) {
@@ -1613,11 +1272,6 @@ async function createAndStoreDownload(
         error
       );
 
-      /*
-       * Se o Storage já recebeu o vídeo,
-       * remove o arquivo para não deixar
-       * lixo no bucket.
-       */
       await deleteStorageObject(
         storagePath,
         accessToken
@@ -1630,8 +1284,7 @@ async function createAndStoreDownload(
         }
       );
 
-      uploadedStoragePath =
-        null;
+      uploadedStoragePath = null;
 
       throw error;
     }
@@ -1646,14 +1299,7 @@ async function createAndStoreDownload(
 
     return storagePath;
   } catch (error) {
-    /*
-     * Segurança adicional:
-     * se o upload ocorreu mas alguma etapa
-     * posterior falhou, tenta remover o arquivo.
-     */
-    if (
-      uploadedStoragePath
-    ) {
+    if (uploadedStoragePath) {
       await deleteStorageObject(
         uploadedStoragePath,
         accessToken
@@ -1687,64 +1333,41 @@ function jobFromRows(
   userId,
   rows
 ) {
-  const files =
-    rows
-      .filter(
-        row =>
-          row?.file_name &&
-          row?.storage_path
-      )
-      .map(
-        (
-          row,
-          index
-        ) => ({
-          name:
-            safeName(
-              row.file_name
-            ),
+  return rows
+    .filter(
+      row =>
+        row?.file_name &&
+        row?.storage_path
+    )
+    .map(
+      (row, index) => ({
+        name: safeName(
+          row.file_name
+        ),
 
-          index:
-            index + 1,
+        index: index + 1,
 
-          originality:
-            Number.isFinite(
-              Number(
-                row.originality
-              )
-            )
-              ? Number(
-                  row.originality
-                )
-              : null,
+        originality:
+          Number.isFinite(
+            Number(row.originality)
+          )
+            ? Number(row.originality)
+            : null,
 
-          stored:
-            true,
+        stored: true,
 
-          storagePath:
-            row.storage_path,
+        storagePath:
+          row.storage_path,
 
-          hook:
-            null,
+        hook: null,
+        body: null,
+        cta: null,
 
-          body:
-            null,
-
-          cta:
-            null,
-
-          hookIndex:
-            null,
-
-          bodyIndex:
-            null,
-
-          ctaIndex:
-            null
-        })
-      );
-
-  return files;
+        hookIndex: null,
+        bodyIndex: null,
+        ctaIndex: null
+      })
+    );
 }
 
 /* =========================================================
@@ -1779,9 +1402,7 @@ async function getJobForUser(
       DATABASE_TIMEOUT
     );
 
-  if (
-    !downloadsResponse.ok
-  ) {
+  if (!downloadsResponse.ok) {
     const detail =
       await getResponseError(
         downloadsResponse
@@ -1803,11 +1424,8 @@ async function getJobForUser(
       const data =
         JSON.parse(text);
 
-      if (
-        Array.isArray(data)
-      ) {
-        rows =
-          data;
+      if (Array.isArray(data)) {
+        rows = data;
       }
     } catch {
       throw new Error(
@@ -1828,8 +1446,7 @@ async function getJobForUser(
 
   if (
     memoryJob &&
-    memoryJob.userId ===
-      userId
+    memoryJob.userId === userId
   ) {
     return {
       ...memoryJob,
@@ -1863,8 +1480,7 @@ async function getJobForUser(
   }
 
   return {
-    id:
-      persistent.id,
+    id: persistent.id,
 
     userId:
       persistent.user_id,
@@ -1920,27 +1536,18 @@ app.post(
 
   upload.fields([
     {
-      name:
-        "hooks",
-
-      maxCount:
-        MAX_HOOKS
+      name: "hooks",
+      maxCount: MAX_HOOKS
     },
 
     {
-      name:
-        "bodies",
-
-      maxCount:
-        MAX_BODIES
+      name: "bodies",
+      maxCount: MAX_BODIES
     },
 
     {
-      name:
-        "ctas",
-
-      maxCount:
-        MAX_CTAS
+      name: "ctas",
+      maxCount: MAX_CTAS
     }
   ]),
 
@@ -1958,9 +1565,7 @@ app.post(
     let ctas;
 
     try {
-      if (
-        storageMode
-      ) {
+      if (storageMode) {
         [
           hooks,
           bodies,
@@ -2080,9 +1685,7 @@ app.post(
         });
     }
 
-    if (
-      !quota.allowed
-    ) {
+    if (!quota.allowed) {
       if (!storageMode) {
         await Promise.all(
           [
@@ -2129,8 +1732,7 @@ app.post(
     await fsp.mkdir(
       dir,
       {
-        recursive:
-          true
+        recursive: true
       }
     );
 
@@ -2168,11 +1770,6 @@ app.post(
       monthlyLimit:
         quota.monthlyLimit
     };
-
-    /*
-     * Primeiro grava o job no Supabase.
-     * Só depois responde ao navegador.
-     */
 
     try {
       await createPersistentJob(
@@ -2243,30 +1840,59 @@ app.post(
     });
 
     /*
-     * O processamento continua usando
-     * o mesmo job persistente.
+     * CORREÇÃO PRINCIPAL PARA VERCEL:
+     *
+     * waitUntil mantém o processamento vivo
+     * depois que a resposta HTTP é enviada.
      */
-    void processJob({
-      job,
 
-      dir,
+    if (process.env.VERCEL) {
+      waitUntil(
+        processJob({
+          job,
 
-      hooks,
+          dir,
 
-      bodies,
+          hooks,
 
-      ctas,
+          bodies,
 
-      storageMode,
+          ctas,
 
-      accessToken:
-        req.accessToken,
+          storageMode,
 
-      userId:
-        req.user.id,
+          accessToken:
+            req.accessToken,
 
-      total
-    });
+          userId:
+            req.user.id,
+
+          total
+        })
+      );
+    } else {
+      void processJob({
+        job,
+
+        dir,
+
+        hooks,
+
+        bodies,
+
+        ctas,
+
+        storageMode,
+
+        accessToken:
+          req.accessToken,
+
+        userId:
+          req.user.id,
+
+        total
+      });
+    }
   }
 );
 
@@ -2289,8 +1915,7 @@ async function processJob({
   const normalizedBodies = [];
   const normalizedCtas = [];
 
-  let quotaReleased =
-    false;
+  let quotaReleased = false;
 
   async function saveProgress() {
     try {
@@ -2847,9 +2472,7 @@ async function processJob({
        DEVOLVE COTA
     ----------------------------------------------------- */
 
-    if (
-      !quotaReleased
-    ) {
+    if (!quotaReleased) {
       quotaReleased =
         true;
 
@@ -3020,9 +2643,7 @@ async function streamStoredVideo(
 ) {
   const headers = {};
 
-  if (
-    req.headers.range
-  ) {
+  if (req.headers.range) {
     headers.Range =
       req.headers.range;
   }
@@ -3041,8 +2662,7 @@ async function streamStoredVideo(
 
   if (!response.ok) {
     return res.sendStatus(
-      response.status ===
-        404
+      response.status === 404
         ? 404
         : 500
     );
@@ -3163,9 +2783,7 @@ app.get(
         );
       }
 
-      if (
-        !file.storagePath
-      ) {
+      if (!file.storagePath) {
         return res
           .status(409)
           .json({
@@ -3221,10 +2839,7 @@ app.get(
           );
       }
 
-      if (
-        job.status !==
-        "done"
-      ) {
+      if (job.status !== "done") {
         return res
           .status(400)
           .send(
@@ -3265,12 +2880,9 @@ app.get(
       );
 
       for (
-        const file of
-          job.files
+        const file of job.files
       ) {
-        if (
-          !file.storagePath
-        ) {
+        if (!file.storagePath) {
           throw new Error(
             `O vídeo ${file.name} não está disponível.`
           );
@@ -3320,9 +2932,7 @@ app.get(
         error
       );
 
-      if (
-        !res.headersSent
-      ) {
+      if (!res.headersSent) {
         res
           .status(500)
           .send(
@@ -3388,18 +2998,12 @@ async function cleanupExpiredDownloads(
     return;
   }
 
-  if (
-    !Array.isArray(rows)
-  ) {
+  if (!Array.isArray(rows)) {
     return;
   }
 
-  for (
-    const row of rows
-  ) {
-    if (
-      row.storage_path
-    ) {
+  for (const row of rows) {
+    if (row.storage_path) {
       await deleteStorageObject(
         row.storage_path,
         accessToken
@@ -3490,11 +3094,8 @@ app.get(
           const data =
             JSON.parse(text);
 
-          if (
-            Array.isArray(data)
-          ) {
-            rows =
-              data;
+          if (Array.isArray(data)) {
+            rows = data;
           }
         } catch {
           return res
@@ -3586,9 +3187,7 @@ app.get(
           req.accessToken
         );
 
-      if (
-        !row?.storage_path
-      ) {
+      if (!row?.storage_path) {
         return res.sendStatus(
           404
         );
@@ -3651,9 +3250,7 @@ app.delete(
         );
       }
 
-      if (
-        row.storage_path
-      ) {
+      if (row.storage_path) {
         await deleteStorageObject(
           row.storage_path,
           req.accessToken
