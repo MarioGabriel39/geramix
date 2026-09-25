@@ -3,29 +3,26 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-
 <title>GeraMix</title>
 
 <style>
-*{
-  box-sizing:border-box;
-}
+*{box-sizing:border-box}
 
 body{
   margin:0;
   min-height:100vh;
   background:
-    radial-gradient(circle at 10% 0%, rgba(0,210,255,.13), transparent 30%),
-    radial-gradient(circle at 90% 10%, rgba(255,45,170,.12), transparent 28%),
+    radial-gradient(circle at 10% 0%,rgba(0,210,255,.13),transparent 30%),
+    radial-gradient(circle at 90% 10%,rgba(255,45,170,.12),transparent 28%),
     #07080d;
   color:#fff;
-  font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+  font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif
 }
 
 main{
   max-width:760px;
   margin:auto;
-  padding:24px 14px 60px;
+  padding:24px 14px 60px
 }
 
 .logo{
@@ -35,17 +32,16 @@ main{
   background:linear-gradient(90deg,#20d9ff,#9b5cff,#ff3b9d);
   -webkit-background-clip:text;
   background-clip:text;
-  color:transparent;
+  color:transparent
 }
 
 .muted{
   color:#969aaa;
-  font-size:13px;
+  font-size:13px
 }
 
 .card{
-  background:
-    linear-gradient(145deg,rgba(255,255,255,.055),rgba(255,255,255,.018));
+  background:linear-gradient(145deg,rgba(255,255,255,.055),rgba(255,255,255,.018));
   border:1px solid rgba(255,255,255,.10);
   border-radius:22px;
   padding:18px;
@@ -53,14 +49,14 @@ main{
   box-shadow:
     0 12px 35px rgba(0,0,0,.28),
     inset 0 1px 0 rgba(255,255,255,.035);
-  backdrop-filter:blur(10px);
+  backdrop-filter:blur(10px)
 }
 
 h2{
   font-size:18px;
   margin:0 0 5px;
   font-weight:850;
-  letter-spacing:-.3px;
+  letter-spacing:-.3px
 }
 
 .pick{
@@ -71,22 +67,21 @@ h2{
   padding:15px;
   margin-top:13px;
   font-weight:850;
-  background:
-    linear-gradient(135deg,rgba(20,210,255,.09),rgba(164,82,255,.07));
+  background:linear-gradient(135deg,rgba(20,210,255,.09),rgba(164,82,255,.07));
   color:#f5f7ff;
-  transition:.2s;
+  transition:.2s
 }
 
 .pick:active{
-  transform:scale(.98);
+  transform:scale(.98)
 }
 
 input{
-  display:none;
+  display:none
 }
 
 .files{
-  margin-top:10px;
+  margin-top:10px
 }
 
 .file{
@@ -99,23 +94,22 @@ input{
   overflow:hidden;
   text-overflow:ellipsis;
   white-space:nowrap;
-  color:#dfe3f1;
+  color:#dfe3f1
 }
 
 .stats{
   display:grid;
   grid-template-columns:repeat(3,1fr);
   gap:9px;
-  margin-top:13px;
+  margin-top:13px
 }
 
 .stat{
-  background:
-    linear-gradient(145deg,rgba(255,255,255,.065),rgba(255,255,255,.025));
+  background:linear-gradient(145deg,rgba(255,255,255,.065),rgba(255,255,255,.025));
   border:1px solid rgba(255,255,255,.07);
   border-radius:15px;
   text-align:center;
-  padding:12px 8px;
+  padding:12px 8px
 }
 
 .n{
@@ -124,43 +118,35 @@ input{
   background:linear-gradient(90deg,#25d9ff,#b15cff,#ff419f);
   -webkit-background-clip:text;
   background-clip:text;
-  color:transparent;
+  color:transparent
 }
 
-button,
-.download{
+button,.download{
   display:block;
   width:100%;
   padding:15px;
   border:0;
   border-radius:15px;
-  background:linear-gradient(
-    90deg,
-    #16d9ff 0%,
-    #8e5cff 52%,
-    #ff3b98 100%
-  );
+  background:linear-gradient(90deg,#16d9ff 0%,#8e5cff 52%,#ff3b98 100%);
   color:#fff;
   font-weight:950;
   margin-top:13px;
   font-size:15px;
   text-align:center;
   text-decoration:none;
-  box-shadow:
-    0 8px 24px rgba(123,82,255,.25);
+  box-shadow:0 8px 24px rgba(123,82,255,.25);
   cursor:pointer;
-  transition:.2s;
+  transition:.2s
 }
 
-button:active,
-.download:active{
-  transform:scale(.98);
+button:active,.download:active{
+  transform:scale(.98)
 }
 
 button:disabled{
   opacity:.45;
   cursor:not-allowed;
-  box-shadow:none;
+  box-shadow:none
 }
 
 .progress{
@@ -169,37 +155,32 @@ button:disabled{
   border-radius:20px;
   overflow:hidden;
   margin-top:13px;
-  border:1px solid rgba(255,255,255,.06);
+  border:1px solid rgba(255,255,255,.06)
 }
 
 .bar{
   height:100%;
   width:0%;
-  background:linear-gradient(
-    90deg,
-    #18d9ff,
-    #8d5cff,
-    #ff3c99
-  );
-  transition:.2s;
+  background:linear-gradient(90deg,#18d9ff,#8d5cff,#ff3c99);
+  transition:.2s
 }
 
 .status{
   margin-top:9px;
   font-size:13px;
-  color:#b8bdcc;
+  color:#b8bdcc
 }
 
 .result{
   max-height:500px;
   overflow:auto;
-  margin-top:13px;
+  margin-top:13px
 }
 
 .combo{
   padding:14px 4px;
   border-bottom:1px solid rgba(255,255,255,.08);
-  font-size:12px;
+  font-size:12px
 }
 
 .pill{
@@ -209,7 +190,7 @@ button:disabled{
   border-radius:9px;
   padding:5px 7px;
   margin:3px 2px;
-  color:#d9deed;
+  color:#d9deed
 }
 
 .preview{
@@ -221,8 +202,7 @@ button:disabled{
   background:#000;
   border:1px solid rgba(255,255,255,.10);
   object-fit:contain;
-  box-shadow:
-    0 8px 25px rgba(0,0,0,.30);
+  box-shadow:0 8px 25px rgba(0,0,0,.30)
 }
 
 .single-download{
@@ -242,11 +222,11 @@ button:disabled{
     rgba(142,92,255,.20),
     rgba(255,59,152,.20)
   );
-  border:1px solid rgba(255,255,255,.12);
+  border:1px solid rgba(255,255,255,.12)
 }
 
 .single-download:active{
-  transform:scale(.98);
+  transform:scale(.98)
 }
 
 .originality{
@@ -259,40 +239,39 @@ button:disabled{
   font-size:15px;
   font-weight:950;
   letter-spacing:.2px;
-  background:
-    linear-gradient(
-      135deg,
-      rgba(22,217,255,.12),
-      rgba(142,92,255,.12),
-      rgba(255,59,152,.12)
-    );
-  border:1px solid rgba(255,255,255,.12);
+  background:linear-gradient(
+    135deg,
+    rgba(22,217,255,.12),
+    rgba(142,92,255,.12),
+    rgba(255,59,152,.12)
+  );
+  border:1px solid rgba(255,255,255,.12)
 }
 
 .originality small{
   margin-right:7px;
   color:#aeb4c5;
   font-size:11px;
-  font-weight:700;
+  font-weight:700
 }
 
 .originality.high{
-  color:#35e6a2;
+  color:#35e6a2
 }
 
 .originality.medium{
-  color:#ffd45c;
+  color:#ffd45c
 }
 
 .originality.low{
-  color:#ff7d8e;
+  color:#ff7d8e
 }
 
 .originality-summary{
   display:grid;
   grid-template-columns:repeat(4,1fr);
   gap:7px;
-  margin-top:13px;
+  margin-top:13px
 }
 
 .originality-summary-item{
@@ -300,37 +279,32 @@ button:disabled{
   padding:10px 5px;
   border-radius:12px;
   background:rgba(255,255,255,.045);
-  border:1px solid rgba(255,255,255,.07);
+  border:1px solid rgba(255,255,255,.07)
 }
 
 .originality-summary-number{
   font-size:17px;
-  font-weight:950;
+  font-weight:950
 }
 
 .originality-summary-label{
   margin-top:3px;
   color:#969aaa;
-  font-size:10px;
+  font-size:10px
 }
-
-/* =========================================================
-   CONTADOR DA ASSINATURA
-========================================================= */
 
 .quota-card{
   margin-top:18px;
   padding:16px;
   border-radius:18px;
-  background:
-    linear-gradient(
-      135deg,
-      rgba(22,217,255,.10),
-      rgba(142,92,255,.10),
-      rgba(255,59,152,.08)
-    );
+  background:linear-gradient(
+    135deg,
+    rgba(22,217,255,.10),
+    rgba(142,92,255,.10),
+    rgba(255,59,152,.08)
+  );
   border:1px solid rgba(255,255,255,.10);
-  text-align:center;
+  text-align:center
 }
 
 .quota-title{
@@ -338,28 +312,23 @@ button:disabled{
   font-size:12px;
   font-weight:800;
   text-transform:uppercase;
-  letter-spacing:.7px;
+  letter-spacing:.7px
 }
 
 .quota-number{
   margin-top:4px;
   font-size:28px;
   font-weight:950;
-  background:linear-gradient(
-    90deg,
-    #25d9ff,
-    #b15cff,
-    #ff419f
-  );
+  background:linear-gradient(90deg,#25d9ff,#b15cff,#ff419f);
   -webkit-background-clip:text;
   background-clip:text;
-  color:transparent;
+  color:transparent
 }
 
 .quota-remaining{
   margin-top:3px;
   color:#aeb4c5;
-  font-size:12px;
+  font-size:12px
 }
 
 .quota-progress{
@@ -368,49 +337,43 @@ button:disabled{
   background:#171923;
   border-radius:20px;
   overflow:hidden;
-  border:1px solid rgba(255,255,255,.06);
+  border:1px solid rgba(255,255,255,.06)
 }
 
 .quota-progress-bar{
   height:100%;
   width:0%;
-  background:linear-gradient(
-    90deg,
-    #18d9ff,
-    #8d5cff,
-    #ff3c99
-  );
-  transition:.3s;
+  background:linear-gradient(90deg,#18d9ff,#8d5cff,#ff3c99);
+  transition:.3s
 }
 
 .note{
   font-size:12px;
   line-height:1.55;
   color:#858b9c;
-  margin-top:13px;
+  margin-top:13px
 }
 
 @media(max-width:480px){
-
   main{
-    padding:20px 12px 50px;
+    padding:20px 12px 50px
   }
 
   .logo{
-    font-size:30px;
+    font-size:30px
   }
 
   .card{
     padding:16px;
-    border-radius:20px;
+    border-radius:20px
   }
 
   .preview{
-    max-height:500px;
+    max-height:500px
   }
 
   .originality-summary{
-    grid-template-columns:repeat(2,1fr);
+    grid-template-columns:repeat(2,1fr)
   }
 }
 </style>
@@ -425,10 +388,6 @@ button:disabled{
 <div class="muted">
   Multiplicador de vídeos com processamento no servidor
 </div>
-
-<!-- =====================================================
-     CONTADOR DA ASSINATURA
-===================================================== -->
 
 <div class="quota-card">
 
@@ -590,48 +549,24 @@ button:disabled{
 
 <script>
 
-let supabaseClient = null;
-let authReady = false;
+let supabaseClient=null;
+let authReady=false;
+let monthlyVideosUsed=0;
+let monthlyVideoLimit=0;
+let quotaLoaded=false;
+let generationInProgress=false;
 
+const DOWNLOADS_BUCKET="geramix-downloads";
 
-/* =========================================================
-   ESTADO DA COTA
-========================================================= */
-
-let monthlyVideosUsed = 0;
-let monthlyVideoLimit = 0;
-let quotaLoaded = false;
-
-
-/* =========================================================
-   ESTADO DA GERAÇÃO
-========================================================= */
-
-let generationInProgress = false;
-
-
-/* =========================================================
-   STORAGE
-========================================================= */
-
-const DOWNLOADS_BUCKET =
-  "geramix-downloads";
-
-
-/* =========================================================
-   AUTENTICAÇÃO
-========================================================= */
 
 async function initializeAuth(){
 
   try{
 
-    const configResponse =
+    const configResponse=
       await fetch(
         "/api/config",
-        {
-          cache:"no-store"
-        }
+        {cache:"no-store"}
       );
 
     if(!configResponse.ok){
@@ -639,9 +574,10 @@ async function initializeAuth(){
       throw new Error(
         "Não foi possível carregar a configuração do servidor."
       );
+
     }
 
-    const config =
+    const config=
       await configResponse.json();
 
     if(
@@ -652,9 +588,10 @@ async function initializeAuth(){
       throw new Error(
         "Configuração do Supabase incompleta."
       );
+
     }
 
-    supabaseClient =
+    supabaseClient=
       window.supabase.createClient(
         config.supabaseUrl,
         config.supabaseAnonKey,
@@ -667,42 +604,34 @@ async function initializeAuth(){
         }
       );
 
-    let result =
+    let result=
       await supabaseClient.auth.getSession();
 
     if(result.error){
 
-      console.error(
-        "Erro ao recuperar sessão:",
-        result.error
-      );
-
       throw result.error;
+
     }
 
-    let session =
+    let session=
       result.data?.session;
 
     if(!session){
 
-      const refresh =
+      const refresh=
         await supabaseClient.auth.refreshSession();
 
       if(refresh.error){
 
-        console.error(
-          "Erro ao renovar sessão na inicialização:",
-          refresh.error
-        );
-
-        window.location.href =
-          "/login.html";
+        window.location.href="/login.html";
 
         return false;
+
       }
 
-      session =
+      session=
         refresh.data?.session;
+
     }
 
     if(
@@ -710,13 +639,13 @@ async function initializeAuth(){
       !session.access_token
     ){
 
-      window.location.href =
-        "/login.html";
+      window.location.href="/login.html";
 
       return false;
+
     }
 
-    authReady = true;
+    authReady=true;
 
     return true;
 
@@ -727,11 +656,12 @@ async function initializeAuth(){
       error
     );
 
-    window.location.href =
-      "/login.html";
+    window.location.href="/login.html";
 
     return false;
+
   }
+
 }
 
 
@@ -740,32 +670,21 @@ async function refreshAuthSession(){
   if(!supabaseClient){
 
     return false;
+
   }
 
   try{
 
-    const result =
+    const result=
       await supabaseClient.auth.refreshSession();
 
-    if(result.error){
-
-      console.error(
-        "Erro Supabase ao renovar sessão:",
-        result.error
-      );
-
-      return false;
-    }
-
     if(
+      result.error ||
       !result.data?.session?.access_token
     ){
 
-      console.error(
-        "Supabase renovou sem devolver uma sessão válida."
-      );
-
       return false;
+
     }
 
     return true;
@@ -778,12 +697,14 @@ async function refreshAuthSession(){
     );
 
     return false;
+
   }
+
 }
 
 
 async function getAuthToken(
-  forceRefresh = false
+  forceRefresh=false
 ){
 
   if(!supabaseClient){
@@ -791,11 +712,12 @@ async function getAuthToken(
     throw new Error(
       "Autenticação ainda não foi inicializada."
     );
+
   }
 
   if(!authReady){
 
-    const initialized =
+    const initialized=
       await initializeAuth();
 
     if(!initialized){
@@ -803,38 +725,34 @@ async function getAuthToken(
       throw new Error(
         "Não foi possível confirmar o login."
       );
+
     }
+
   }
 
-  if(forceRefresh){
+  if(
+    forceRefresh &&
+    !await refreshAuthSession()
+  ){
 
-    const refreshed =
-      await refreshAuthSession();
+    throw new Error(
+      "Não foi possível renovar sua sessão. Faça login novamente."
+    );
 
-    if(!refreshed){
-
-      throw new Error(
-        "Não foi possível renovar sua sessão. Faça login novamente."
-      );
-    }
   }
 
-  let result =
+  let result=
     await supabaseClient.auth.getSession();
 
   if(result.error){
 
-    console.error(
-      "Erro ao obter sessão:",
-      result.error
-    );
-
     throw new Error(
       "Não foi possível acessar sua sessão."
     );
+
   }
 
-  let session =
+  let session=
     result.data?.session;
 
   if(
@@ -842,28 +760,20 @@ async function getAuthToken(
     !session.access_token
   ){
 
-    const refreshed =
-      await refreshAuthSession();
-
-    if(!refreshed){
+    if(!await refreshAuthSession()){
 
       throw new Error(
         "Sua sessão não está disponível. Faça login novamente."
       );
+
     }
 
-    result =
+    result=
       await supabaseClient.auth.getSession();
 
-    if(result.error){
-
-      throw new Error(
-        "Não foi possível recuperar sua sessão."
-      );
-    }
-
-    session =
+    session=
       result.data?.session;
+
   }
 
   if(
@@ -874,42 +784,39 @@ async function getAuthToken(
     throw new Error(
       "Sua sessão não está disponível. Faça login novamente."
     );
+
   }
 
   if(session.expires_at){
 
-    const expiresAt =
-      Number(
-        session.expires_at
-      );
+    const expiresAt=
+      Number(session.expires_at);
 
-    const now =
+    const now=
       Math.floor(
-        Date.now() / 1000
+        Date.now()/1000
       );
 
     if(
-      expiresAt <= now + 60
+      expiresAt <= now+60 &&
+      await refreshAuthSession()
     ){
 
-      const refreshed =
-        await refreshAuthSession();
+      result=
+        await supabaseClient.auth.getSession();
 
-      if(refreshed){
+      if(
+        !result.error &&
+        result.data?.session?.access_token
+      ){
 
-        result =
-          await supabaseClient.auth.getSession();
+        session=
+          result.data.session;
 
-        if(
-          !result.error &&
-          result.data?.session?.access_token
-        ){
-
-          session =
-            result.data.session;
-        }
       }
+
     }
+
   }
 
   if(
@@ -920,56 +827,53 @@ async function getAuthToken(
     throw new Error(
       "Sua sessão expirou. Faça login novamente."
     );
+
   }
 
   return session.access_token;
+
 }
 
 
 async function authHeaders(
-  forceRefresh = false
+  forceRefresh=false
 ){
 
-  const token =
+  const token=
     await getAuthToken(
       forceRefresh
     );
 
   return {
     "Authorization":
-      "Bearer " + token
+      "Bearer "+token
   };
+
 }
 
 
-/* =========================================================
-   DADOS
-========================================================= */
-
-const D = {
+const D={
   h:[],
   b:[],
   c:[]
 };
 
-const $ = id =>
-  document.getElementById(id);
+const $=
+  id =>
+    document.getElementById(id);
 
-
-/* =========================================================
-   CONTADOR DA COTA MENSAL
-========================================================= */
 
 async function loadMonthlyQuota(){
 
   if(!supabaseClient){
 
     return false;
+
   }
 
   try{
 
-    const subscriptionResult =
+    const subscriptionResult=
       await supabaseClient
         .from("subscriptions")
         .select(
@@ -988,58 +892,49 @@ async function loadMonthlyQuota(){
         .limit(1)
         .maybeSingle();
 
-    if(
-      subscriptionResult.error
-    ){
+    if(subscriptionResult.error){
 
-      console.error(
-        "Erro ao consultar assinatura:",
-        subscriptionResult.error
-      );
+      quotaLoaded=false;
 
-      quotaLoaded = false;
-
-      $("quotaNumber")
-        .textContent =
+      $("quotaNumber").textContent=
         "Indisponível";
 
-      $("quotaRemaining")
-        .textContent =
+      $("quotaRemaining").textContent=
         "Não foi possível consultar sua assinatura.";
 
       updateGenerateButtonState();
 
       return false;
+
     }
 
-    const subscription =
+    const subscription=
       subscriptionResult.data;
 
     if(!subscription){
 
-      quotaLoaded = false;
+      quotaLoaded=false;
 
-      monthlyVideosUsed = 0;
-      monthlyVideoLimit = 0;
+      monthlyVideosUsed=0;
 
-      $("quotaNumber")
-        .textContent =
+      monthlyVideoLimit=0;
+
+      $("quotaNumber").textContent=
         "Sem assinatura";
 
-      $("quotaRemaining")
-        .textContent =
+      $("quotaRemaining").textContent=
         "Nenhuma assinatura ativa encontrada.";
 
-      $("quotaProgressBar")
-        .style.width =
+      $("quotaProgressBar").style.width=
         "0%";
 
       updateGenerateButtonState();
 
       return false;
+
     }
 
-    const planResult =
+    const planResult=
       await supabaseClient
         .from("plans")
         .select(
@@ -1060,39 +955,27 @@ async function loadMonthlyQuota(){
       !planResult.data
     ){
 
-      console.error(
-        "Erro ao consultar plano:",
-        planResult.error
-      );
+      quotaLoaded=false;
 
-      quotaLoaded = false;
-
-      $("quotaNumber")
-        .textContent =
+      $("quotaNumber").textContent=
         "Indisponível";
 
-      $("quotaRemaining")
-        .textContent =
+      $("quotaRemaining").textContent=
         "Não foi possível consultar seu plano.";
 
       updateGenerateButtonState();
 
       return false;
+
     }
 
-    const used =
+    updateQuotaDisplay(
       Number(
         subscription.videos_used || 0
-      );
-
-    const limit =
+      ),
       Number(
         planResult.data.monthly_limit || 0
-      );
-
-    updateQuotaDisplay(
-      used,
-      limit
+      )
     );
 
     return true;
@@ -1104,106 +987,92 @@ async function loadMonthlyQuota(){
       error
     );
 
-    quotaLoaded = false;
+    quotaLoaded=false;
 
-    $("quotaNumber")
-      .textContent =
+    $("quotaNumber").textContent=
       "Indisponível";
 
-    $("quotaRemaining")
-      .textContent =
+    $("quotaRemaining").textContent=
       "Erro ao consultar sua assinatura.";
 
     updateGenerateButtonState();
 
     return false;
+
   }
+
 }
 
-
-/* =========================================================
-   ATUALIZA CONTADOR
-========================================================= */
 
 function updateQuotaDisplay(
   videosUsed,
   monthlyLimit
 ){
 
-  const used =
+  const used=
     Number(
       videosUsed || 0
     );
 
-  const limit =
+  const limit=
     Number(
       monthlyLimit || 0
     );
 
-  monthlyVideosUsed =
+  monthlyVideosUsed=
     used;
 
-  monthlyVideoLimit =
+  monthlyVideoLimit=
     limit;
 
   if(!limit){
 
-    quotaLoaded =
-      false;
+    quotaLoaded=false;
 
-    $("quotaNumber")
-      .textContent =
+    $("quotaNumber").textContent=
       "Indisponível";
 
-    $("quotaRemaining")
-      .textContent =
+    $("quotaRemaining").textContent=
       "Não foi possível determinar sua cota mensal.";
 
-    $("quotaProgressBar")
-      .style.width =
+    $("quotaProgressBar").style.width=
       "0%";
 
     updateGenerateButtonState();
 
     return;
+
   }
 
-  quotaLoaded =
-    true;
+  quotaLoaded=true;
 
-  const remaining =
+  const remaining=
     Math.max(
       0,
-      limit - used
+      limit-used
     );
 
-  const percentage =
+  const percentage=
     Math.min(
       100,
       Math.round(
-        used / limit * 100
+        used/limit*100
       )
     );
 
-  $("quotaNumber")
-    .textContent =
+  $("quotaNumber").textContent=
     `${used.toLocaleString("pt-BR")} / ${limit.toLocaleString("pt-BR")} vídeos`;
 
-  $("quotaRemaining")
-    .textContent =
+  $("quotaRemaining").textContent=
     `${remaining.toLocaleString("pt-BR")} vídeos disponíveis neste mês`;
 
-  $("quotaProgressBar")
-    .style.width =
-    percentage + "%";
+  $("quotaProgressBar").style.width=
+    percentage+"%";
 
   updateGenerateButtonState();
+
 }
 
-
-/* =========================================================
-   VERIFICA COTA
-========================================================= */
 
 function checkQuotaForGeneration(
   total
@@ -1216,104 +1085,129 @@ function checkQuotaForGeneration(
       message:
         "Ainda estamos verificando sua cota mensal. Aguarde alguns segundos e tente novamente."
     };
+
   }
 
-  const remaining =
+  const remaining=
     Math.max(
       0,
-      monthlyVideoLimit -
-      monthlyVideosUsed
+      monthlyVideoLimit-monthlyVideosUsed
     );
 
-  if(remaining <= 0){
+  if(remaining<=0){
 
     return {
       allowed:false,
       message:
         "Sua cota mensal foi atingida. Você não possui vídeos disponíveis para gerar neste momento."
     };
+
   }
 
-  if(total > remaining){
+  if(total>remaining){
 
     return {
       allowed:false,
       message:
         `Você está tentando gerar ${total.toLocaleString("pt-BR")} vídeos, mas possui apenas ${remaining.toLocaleString("pt-BR")} vídeos disponíveis neste mês.`
     };
+
   }
 
   return {
     allowed:true,
     message:""
   };
+
 }
 
 
-/* =========================================================
-   BOTÃO
-========================================================= */
-
 function updateGenerateButtonState(){
 
-  const button =
+  const button=
     $("go");
 
   if(!button){
+
     return;
+
   }
 
   if(generationInProgress){
 
-    button.disabled =
-      true;
+    button.disabled=true;
 
-    button.textContent =
+    button.textContent=
       "Gerando…";
 
     return;
+
   }
 
   if(!quotaLoaded){
 
-    button.disabled =
-      false;
+    button.disabled=false;
 
-    button.textContent =
+    button.textContent=
       "Gerar vídeos MP4";
 
     return;
+
   }
 
-  const remaining =
+  const remaining=
     Math.max(
       0,
-      monthlyVideoLimit -
-      monthlyVideosUsed
+      monthlyVideoLimit-monthlyVideosUsed
     );
 
-  if(remaining <= 0){
+  if(remaining<=0){
 
-    button.disabled =
-      true;
+    button.disabled=true;
 
-    button.textContent =
+    button.textContent=
       "Cota mensal atingida";
 
     return;
+
   }
 
-  button.disabled =
-    false;
+  button.disabled=false;
 
-  button.textContent =
+  button.textContent=
     "Gerar vídeos MP4";
+
 }
 
 
-/* =========================================================
-   LISTA DE ARQUIVOS
-========================================================= */
+function escapeHtml(value){
+
+  return String(
+    value
+  )
+  .replace(
+    /&/g,
+    "&amp;"
+  )
+  .replace(
+    /</g,
+    "&lt;"
+  )
+  .replace(
+    />/g,
+    "&gt;"
+  )
+  .replace(
+    /"/g,
+    "&quot;"
+  )
+  .replace(
+    /'/g,
+    "&#039;"
+  );
+
+}
+
 
 function setup(
   id,
@@ -1322,128 +1216,94 @@ function setup(
   max
 ){
 
-  $(id).onchange = e => {
+  $(id).onchange=
+    e => {
 
-    const selected = [
-      ...e.target.files
-    ];
+      const selected=
+        [
+          ...e.target.files
+        ];
 
-    if(
-      selected.length > max
-    ){
+      if(
+        selected.length >
+        max
+      ){
 
-      alert(
-        `Limite atingido: selecione no máximo ${max} vídeos nesta categoria.`
-      );
+        alert(
+          `Limite atingido: selecione no máximo ${max} vídeos nesta categoria.`
+        );
 
-      e.target.value = "";
+        e.target.value="";
 
-      D[k] = [];
+        D[k]=[];
 
-    }else{
+      }else{
 
-      D[k] = selected;
+        D[k]=selected;
 
-    }
+      }
 
-    $(list).innerHTML =
-      D[k]
-        .map(
-          (f,i) =>
-            `<div class="file">${i + 1}. ${escapeHtml(f.name)}</div>`
-        )
-        .join("");
+      $(list).innerHTML=
+        D[k]
+          .map(
+            (f,i) =>
+              `<div class="file">${i+1}. ${escapeHtml(f.name)}</div>`
+          )
+          .join("");
 
-    update();
-  };
+      update();
+
+    };
 
 }
 
-
-/* =========================================================
-   ESCAPA HTML
-========================================================= */
-
-function escapeHtml(
-  value
-){
-
-  return String(value)
-    .replace(
-      /&/g,
-      "&amp;"
-    )
-    .replace(
-      /</g,
-      "&lt;"
-    )
-    .replace(
-      />/g,
-      "&gt;"
-    )
-    .replace(
-      /"/g,
-      "&quot;"
-    )
-    .replace(
-      /'/g,
-      "&#039;"
-    );
-}
-
-
-/* =========================================================
-   CONTADORES
-========================================================= */
 
 function update(){
 
-  $("hn").textContent =
+  $("hn").textContent=
     D.h.length;
 
-  $("bn").textContent =
+  $("bn").textContent=
     D.b.length;
 
-  $("cn").textContent =
+  $("cn").textContent=
     D.c.length;
 
-  const total =
+  const total=
     D.h.length *
     D.b.length *
     D.c.length;
 
-  $("total").textContent =
+  $("total").textContent=
     total.toLocaleString(
       "pt-BR"
     );
 
   updateGenerateButtonState();
+
 }
 
-
-/* =========================================================
-   ORIGINALIDADE
-========================================================= */
 
 function originalityClass(
   value
 ){
 
-  if(value >= 90){
+  if(value>=90){
+
     return "high";
+
   }
 
-  if(value >= 80){
+  if(value>=80){
+
     return "medium";
+
   }
 
   return "low";
+
 }
 
-
-/* =========================================================
-   RESUMO
-========================================================= */
 
 function renderOriginalitySummary(
   files
@@ -1451,13 +1311,14 @@ function renderOriginalitySummary(
 
   if(!files.length){
 
-    $("originalitySummary")
-      .innerHTML = "";
+    $("originalitySummary").innerHTML=
+      "";
 
     return;
+
   }
 
-  const counts = {
+  const counts={
     100:0,
     90:0,
     80:0,
@@ -1467,7 +1328,7 @@ function renderOriginalitySummary(
   files.forEach(
     file => {
 
-      const value =
+      const value=
         Number(
           file.originality
         );
@@ -1480,88 +1341,76 @@ function renderOriginalitySummary(
       ){
 
         counts[value]++;
+
       }
+
     }
   );
 
-  $("originalitySummary")
-    .innerHTML = `
+  $("originalitySummary").innerHTML=`
+    <div class="originality-summary">
 
-      <div class="originality-summary">
-
-        <div class="originality-summary-item">
-          <div class="originality-summary-number">
-            ${counts[100]}
-          </div>
-          <div class="originality-summary-label">
-            100%
-          </div>
+      <div class="originality-summary-item">
+        <div class="originality-summary-number">
+          ${counts[100]}
         </div>
-
-        <div class="originality-summary-item">
-          <div class="originality-summary-number">
-            ${counts[90]}
-          </div>
-          <div class="originality-summary-label">
-            90%
-          </div>
+        <div class="originality-summary-label">
+          100%
         </div>
-
-        <div class="originality-summary-item">
-          <div class="originality-summary-number">
-            ${counts[80]}
-          </div>
-          <div class="originality-summary-label">
-            80%
-          </div>
-        </div>
-
-        <div class="originality-summary-item">
-          <div class="originality-summary-number">
-            ${counts[70]}
-          </div>
-          <div class="originality-summary-label">
-            70%
-          </div>
-        </div>
-
       </div>
+
+      <div class="originality-summary-item">
+        <div class="originality-summary-number">
+          ${counts[90]}
+        </div>
+        <div class="originality-summary-label">
+          90%
+        </div>
+      </div>
+
+      <div class="originality-summary-item">
+        <div class="originality-summary-number">
+          ${counts[80]}
+        </div>
+        <div class="originality-summary-label">
+          80%
+        </div>
+      </div>
+
+      <div class="originality-summary-item">
+        <div class="originality-summary-number">
+          ${counts[70]}
+        </div>
+        <div class="originality-summary-label">
+          70%
+        </div>
+      </div>
+
+    </div>
   `;
+
 }
 
-
-/* =========================================================
-   URL AUTENTICADA
-========================================================= */
 
 async function createAuthenticatedVideoUrl(
   jobId,
   fileName
 ){
 
-  const token =
+  const token=
     await getAuthToken();
 
-  return (
-    "/api/jobs/" +
-    encodeURIComponent(
-      jobId
-    ) +
-    "/video/" +
-    encodeURIComponent(
-      fileName
-    ) +
-    "?token=" +
-    encodeURIComponent(
-      token
-    )
+  return(
+    "/api/jobs/"+
+    encodeURIComponent(jobId)+
+    "/video/"+
+    encodeURIComponent(fileName)+
+    "?token="+
+    encodeURIComponent(token)
   );
+
 }
 
-
-/* =========================================================
-   STORAGE — UPLOAD DIRETO
-========================================================= */
 
 function getSupabaseProjectRef(){
 
@@ -1570,11 +1419,15 @@ function getSupabaseProjectRef(){
     throw new Error(
       "Supabase ainda não foi inicializado."
     );
+
   }
 
   return new URL(
     supabaseClient.supabaseUrl
-  ).hostname.split(".")[0];
+  )
+  .hostname
+  .split(".")[0];
+
 }
 
 
@@ -1583,18 +1436,29 @@ function sanitizeStorageFileName(
 ){
 
   return String(
-    name ||
-    "video.mp4"
+    name || "video.mp4"
   )
-    .replace(
-      /[^a-zA-Z0-9._-]/g,
-      "_"
-    )
-    .slice(
-      -120
-    );
+  .replace(
+    /[^a-zA-Z0-9._-]/g,
+    "_"
+  )
+  .slice(
+    -120
+  );
+
 }
 
+
+/*
+=========================================================
+UPLOAD TUS CORRIGIDO
+
+- um arquivo por vez
+- não usa findPreviousUploads()
+- não envia os dados no POST inicial
+- até 3 tentativas por arquivo
+=========================================================
+*/
 
 async function uploadSourceFile(
   file,
@@ -1604,18 +1468,20 @@ async function uploadSourceFile(
 ){
 
   if(
-    typeof window.tus === "undefined"
+    typeof window.tus ===
+    "undefined"
   ){
 
     throw new Error(
       "O sistema de upload ainda não carregou. Atualize a página e tente novamente."
     );
+
   }
 
-  const token =
+  const token=
     await getAuthToken();
 
-  const userResult =
+  const userResult=
     await supabaseClient.auth.getUser();
 
   if(
@@ -1626,162 +1492,210 @@ async function uploadSourceFile(
     throw new Error(
       "Não foi possível identificar o usuário."
     );
+
   }
 
-  const userId =
+  const userId=
     userResult.data.user.id;
 
-  const projectRef =
+  const projectRef=
     getSupabaseProjectRef();
 
-  const safeFileName =
+  const safeFileName=
     sanitizeStorageFileName(
       file.name
     );
 
-  const extension =
+  const extension=
     safeFileName.includes(".")
       ? safeFileName.slice(
           safeFileName.lastIndexOf(".")
         )
       : ".mp4";
 
-  const storagePath =
+  const storagePath=
     `${userId}/inputs/${batchId}/${category}-${index}${extension}`;
 
-  const endpoint =
+  const endpoint=
     `https://${projectRef}.storage.supabase.co/storage/v1/upload/resumable`;
 
-  $("status")
-    .textContent =
-    `Enviando ${category} ${index}…`;
+  const maxAttempts=
+    3;
 
-  return new Promise(
-    (
-      resolve,
-      reject
-    ) => {
+  for(
+    let attempt=1;
+    attempt<=maxAttempts;
+    attempt++
+  ){
 
-      const upload =
-        new tus.Upload(
-          file,
-          {
-            endpoint,
+    try{
 
-            retryDelays:[
-              0,
-              3000,
-              5000,
-              10000,
-              20000
-            ],
+      $("status").textContent=
+        attempt===1
+          ? `Enviando ${category} ${index}…`
+          : `Tentando novamente ${category} ${index} (${attempt}/${maxAttempts})…`;
 
-            headers:{
-              authorization:
-                `Bearer ${token}`,
+      const result=
+        await new Promise(
+          (
+            resolve,
+            reject
+          ) => {
 
-              apikey:
-                supabaseClient.supabaseKey
-            },
+            let finished=
+              false;
 
-            uploadDataDuringCreation:
-              true,
+            const upload=
+              new tus.Upload(
+                file,
+                {
 
-            removeFingerprintOnSuccess:
-              true,
+                  endpoint,
 
-            metadata:{
-              bucketName:
-                DOWNLOADS_BUCKET,
+                  uploadDataDuringCreation:
+                    false,
 
-              objectName:
-                storagePath,
+                  removeFingerprintOnSuccess:
+                    true,
 
-              contentType:
-                file.type ||
-                "video/mp4",
+                  retryDelays:[
+                    0,
+                    3000,
+                    5000,
+                    10000,
+                    20000
+                  ],
 
-              cacheControl:
-                "3600"
-            },
+                  headers:{
+                    authorization:
+                      `Bearer ${token}`,
 
-            onError:
-              error => {
+                    apikey:
+                      supabaseClient.supabaseKey
+                  },
 
-                console.error(
-                  "Erro no upload:",
-                  error
-                );
+                  metadata:{
+                    bucketName:
+                      DOWNLOADS_BUCKET,
 
-                reject(
-                  new Error(
-                    `Erro ao enviar ${file.name}: ${error?.message || "falha no upload"}`
-                  )
-                );
-              },
+                    objectName:
+                      storagePath,
 
-            onProgress:
-              (
-                bytesUploaded,
-                bytesTotal
-              ) => {
+                    contentType:
+                      file.type ||
+                      "video/mp4",
 
-                const percentage =
-                  bytesTotal
-                    ? Math.round(
-                        bytesUploaded /
-                        bytesTotal *
-                        100
-                      )
-                    : 0;
+                    cacheControl:
+                      "3600"
+                  },
 
-                $("status")
-                  .textContent =
-                  `Enviando ${category} ${index}: ${percentage}%`;
-              },
+                  onError:
+                    error => {
 
-            onSuccess:
-              () => {
+                      if(finished){
 
-                resolve({
-                  storagePath,
+                        return;
 
-                  originalName:
-                    file.name
-                });
-              }
-          }
-        );
+                      }
 
-      upload
-        .findPreviousUploads()
-        .then(
-          previousUploads => {
+                      finished=
+                        true;
 
-            if(
-              previousUploads.length
-            ){
+                      console.error(
+                        `Erro TUS no arquivo ${file.name}, tentativa ${attempt}:`,
+                        error
+                      );
 
-              upload.resumeFromPreviousUpload(
-                previousUploads[0]
+                      reject(
+                        error
+                      );
+
+                    },
+
+                  onProgress:
+                    (
+                      bytesUploaded,
+                      bytesTotal
+                    ) => {
+
+                      const percentage=
+                        bytesTotal
+                          ? Math.round(
+                              bytesUploaded /
+                              bytesTotal *
+                              100
+                            )
+                          : 0;
+
+                      $("status").textContent=
+                        `Enviando ${category} ${index}: ${percentage}%`;
+
+                    },
+
+                  onSuccess:
+                    () => {
+
+                      if(finished){
+
+                        return;
+
+                      }
+
+                      finished=
+                        true;
+
+                      resolve({
+                        storagePath,
+
+                        originalName:
+                          file.name
+                      });
+
+                    }
+
+                }
               );
-            }
 
             upload.start();
-          }
-        )
-        .catch(
-          error => {
 
-            reject(
-              new Error(
-                `Não foi possível iniciar o upload de ${file.name}: ${error?.message || "erro desconhecido"}`
-              )
-            );
           }
         );
+
+      return result;
+
+    }catch(error){
+
+      console.error(
+        `Falha no upload de ${file.name}, tentativa ${attempt}/${maxAttempts}:`,
+        error
+      );
+
+      if(
+        attempt>=maxAttempts
+      ){
+
+        throw new Error(
+          `Erro ao enviar ${file.name}: não foi possível concluir o upload após ${maxAttempts} tentativas. Verifique a conexão e tente novamente.`
+        );
+
+      }
+
+      await new Promise(
+        resolve =>
+          setTimeout(
+            resolve,
+            3000
+          )
+      );
+
     }
+
+  }
+
+  throw new Error(
+    `Não foi possível enviar ${file.name}.`
   );
+
 }
 
 
@@ -1791,28 +1705,30 @@ async function uploadCategory(
   batchId
 ){
 
-  const uploaded = [];
+  const uploaded=[];
 
   for(
-    let i = 0;
-    i < files.length;
+    let i=0;
+    i<files.length;
     i++
   ){
 
-    const result =
+    const result=
       await uploadSourceFile(
         files[i],
         category,
-        i + 1,
+        i+1,
         batchId
       );
 
     uploaded.push(
       result
     );
+
   }
 
   return uploaded;
+
 }
 
 
@@ -1827,18 +1743,15 @@ async function deleteUploadedInputs(
   ){
 
     return;
+
   }
 
   try{
 
     await supabaseClient
       .storage
-      .from(
-        DOWNLOADS_BUCKET
-      )
-      .remove(
-        paths
-      );
+      .from(DOWNLOADS_BUCKET)
+      .remove(paths);
 
   }catch(error){
 
@@ -1846,13 +1759,11 @@ async function deleteUploadedInputs(
       "Erro ao limpar uploads temporários:",
       error
     );
+
   }
+
 }
 
-
-/* =========================================================
-   SELETORES
-========================================================= */
 
 setup(
   "hooks",
@@ -1876,22 +1787,19 @@ setup(
 );
 
 
-/* =========================================================
-   GERAR
-========================================================= */
-
-$("go").onclick =
+$("go").onclick=
   async () => {
 
     if(generationInProgress){
 
       return;
+
     }
 
     if(
-      D.h.length > 5 ||
-      D.b.length > 5 ||
-      D.c.length > 6
+      D.h.length>5 ||
+      D.b.length>5 ||
+      D.c.length>6
     ){
 
       alert(
@@ -1899,6 +1807,7 @@ $("go").onclick =
       );
 
       return;
+
     }
 
     if(
@@ -1912,93 +1821,77 @@ $("go").onclick =
       );
 
       return;
+
     }
 
-    const total =
+    const total=
       D.h.length *
       D.b.length *
       D.c.length;
 
-    if(
-      total > 150
-    ){
+    if(total>150){
 
       alert(
         "O limite máximo é de 150 combinações."
       );
 
       return;
+
     }
 
-    const quotaCheck =
+    const quotaCheck=
       checkQuotaForGeneration(
         total
       );
 
-    if(
-      !quotaCheck.allowed
-    ){
+    if(!quotaCheck.allowed){
 
       alert(
         quotaCheck.message
       );
 
       return;
+
     }
 
-    generationInProgress =
+    generationInProgress=
       true;
 
     updateGenerateButtonState();
 
-    $("download")
-      .style.display =
+    $("download").style.display=
       "none";
 
-    $("result")
-      .innerHTML =
+    $("result").innerHTML=
       "";
 
-    $("originalitySummary")
-      .innerHTML =
+    $("originalitySummary").innerHTML=
       "";
 
-    $("bar")
-      .style.width =
+    $("bar").style.width=
       "0%";
 
-    $("status")
-      .textContent =
+    $("status").textContent=
       "Preparando envio…";
 
-    let uploadedPaths = [];
+    let uploadedPaths=[];
 
     try{
 
-      /*
-        Cria um lote único para os arquivos temporários.
-      */
-
-      const batchId =
+      const batchId=
         crypto.randomUUID();
 
-      /*
-        ENVIA DIRETAMENTE AO SUPABASE.
-        A Vercel NÃO recebe os arquivos.
-      */
-
-      $("status")
-        .textContent =
+      $("status").textContent=
         "Enviando ganchos…";
 
-      const hooks =
+      const hooks=
         await uploadCategory(
           D.h,
           "hook",
           batchId
         );
 
-      uploadedPaths =
+      uploadedPaths=
         uploadedPaths.concat(
           hooks.map(
             item =>
@@ -2006,18 +1899,17 @@ $("go").onclick =
           )
         );
 
-      $("status")
-        .textContent =
+      $("status").textContent=
         "Enviando corpos…";
 
-      const bodies =
+      const bodies=
         await uploadCategory(
           D.b,
           "body",
           batchId
         );
 
-      uploadedPaths =
+      uploadedPaths=
         uploadedPaths.concat(
           bodies.map(
             item =>
@@ -2025,18 +1917,17 @@ $("go").onclick =
           )
         );
 
-      $("status")
-        .textContent =
+      $("status").textContent=
         "Enviando CTAs…";
 
-      const ctas =
+      const ctas=
         await uploadCategory(
           D.c,
           "cta",
           batchId
         );
 
-      uploadedPaths =
+      uploadedPaths=
         uploadedPaths.concat(
           ctas.map(
             item =>
@@ -2044,18 +1935,13 @@ $("go").onclick =
           )
         );
 
-      /*
-        Agora somente um JSON pequeno vai para a Vercel.
-      */
-
-      $("status")
-        .textContent =
+      $("status").textContent=
         "Iniciando geração…";
 
-      let headers =
+      let headers=
         await authHeaders();
 
-      let response =
+      let response=
         await fetch(
           "/api/jobs",
           {
@@ -2063,46 +1949,38 @@ $("go").onclick =
 
             headers:{
               ...headers,
-
               "Content-Type":
                 "application/json"
             },
 
             body:
               JSON.stringify({
-
                 inputs:{
                   hooks,
-
                   bodies,
-
                   ctas
                 }
-
               })
           }
         );
 
-      if(
-        response.status === 401
-      ){
+      if(response.status===401){
 
-        const refreshed =
+        const refreshed=
           await refreshAuthSession();
 
-        if(
-          !refreshed
-        ){
+        if(!refreshed){
 
           throw new Error(
             "O servidor recusou sua sessão. Faça login novamente."
           );
+
         }
 
-        headers =
+        headers=
           await authHeaders();
 
-        response =
+        response=
           await fetch(
             "/api/jobs",
             {
@@ -2110,32 +1988,28 @@ $("go").onclick =
 
               headers:{
                 ...headers,
-
                 "Content-Type":
                   "application/json"
               },
 
               body:
                 JSON.stringify({
-
                   inputs:{
                     hooks,
-
                     bodies,
-
                     ctas
                   }
-
                 })
             }
           );
+
       }
 
       let job;
 
       try{
 
-        job =
+        job=
           await response.json();
 
       }catch{
@@ -2143,49 +2017,47 @@ $("go").onclick =
         throw new Error(
           `Resposta inválida do servidor. Código: ${response.status}`
         );
+
       }
 
       if(
-        job.videosUsed !== undefined &&
-        job.monthlyLimit !== undefined
+        job.videosUsed !==
+          undefined &&
+        job.monthlyLimit !==
+          undefined
       ){
 
         updateQuotaDisplay(
           job.videosUsed,
           job.monthlyLimit
         );
+
       }
 
-      if(
-        !response.ok
-      ){
+      if(!response.ok){
 
         throw new Error(
           job.error ||
           `Falha ao iniciar geração. Código: ${response.status}`
         );
+
       }
 
-      /*
-        O servidor recebeu somente os caminhos dos
-        arquivos. Os arquivos grandes continuam no Storage.
-      */
-
-      $("status")
-        .textContent =
+      $("status").textContent=
         "Vídeos enviados. Processando…";
 
-      const poll =
+
+      const poll=
         async () => {
 
           try{
 
-            let pollHeaders =
+            let pollHeaders=
               await authHeaders();
 
-            let pollResponse =
+            let pollResponse=
               await fetch(
-                "/api/jobs/" +
+                "/api/jobs/"+
                 encodeURIComponent(
                   job.id
                 ),
@@ -2196,27 +2068,27 @@ $("go").onclick =
               );
 
             if(
-              pollResponse.status === 401
+              pollResponse.status===
+              401
             ){
 
-              const refreshed =
+              const refreshed=
                 await refreshAuthSession();
 
-              if(
-                !refreshed
-              ){
+              if(!refreshed){
 
                 throw new Error(
                   "A sessão expirou durante o processamento. Faça login novamente."
                 );
+
               }
 
-              pollHeaders =
+              pollHeaders=
                 await authHeaders();
 
-              pollResponse =
+              pollResponse=
                 await fetch(
-                  "/api/jobs/" +
+                  "/api/jobs/"+
                   encodeURIComponent(
                     job.id
                   ),
@@ -2225,13 +2097,14 @@ $("go").onclick =
                       pollHeaders
                   }
                 );
+
             }
 
             let x;
 
             try{
 
-              x =
+              x=
                 await pollResponse.json();
 
             }catch{
@@ -2239,19 +2112,19 @@ $("go").onclick =
               throw new Error(
                 `Resposta inválida do servidor. Código: ${pollResponse.status}`
               );
+
             }
 
-            if(
-              !pollResponse.ok
-            ){
+            if(!pollResponse.ok){
 
               throw new Error(
                 x.error ||
                 `Falha ao consultar processamento. Código: ${pollResponse.status}`
               );
+
             }
 
-            const pct =
+            const pct=
               x.total
                 ? Math.round(
                     x.done /
@@ -2260,44 +2133,38 @@ $("go").onclick =
                   )
                 : 0;
 
-            $("bar")
-              .style.width =
-              pct + "%";
+            $("bar").style.width=
+              pct+"%";
 
-            $("status")
-              .textContent =
+            $("status").textContent=
               x.current ||
               "Processando…";
 
-            if(
-              x.files?.length
-            ){
+
+            if(x.files?.length){
 
               renderOriginalitySummary(
                 x.files
               );
 
-              const videoItems =
-                [];
+              const videoItems=[];
 
               for(
-                const f
-                of x.files
+                const f of x.files
               ){
 
-                const videoUrl =
+                const videoUrl=
                   await createAuthenticatedVideoUrl(
                     job.id,
                     f.name
                   );
 
-                const originality =
+                const originality=
                   Number(
                     f.originality
                   );
 
                 videoItems.push(`
-
                   <div class="combo">
 
                     <b>
@@ -2321,9 +2188,7 @@ $("go").onclick =
                       preload="metadata"
                       src="${videoUrl}"
                     >
-
                       Seu navegador não consegue reproduzir este vídeo.
-
                     </video>
 
                     <span class="pill">
@@ -2356,60 +2221,54 @@ $("go").onclick =
                     </a>
 
                   </div>
-
                 `);
+
               }
 
-              $("result")
-                .innerHTML =
+              $("result").innerHTML=
                 videoItems.join("");
+
             }
 
-            if(
-              x.status ===
-              "done"
-            ){
 
-              $("bar")
-                .style.width =
+            if(x.status==="done"){
+
+              $("bar").style.width=
                 "100%";
 
-              const token =
+              const token=
                 await getAuthToken();
 
-              $("download")
-                .href =
-                x.zip +
-                "?token=" +
+              $("download").href=
+                x.zip+
+                "?token="+
                 encodeURIComponent(
                   token
                 );
 
-              $("download")
-                .style.display =
+              $("download").style.display=
                 "block";
 
-              $("status")
-                .textContent =
+              $("status").textContent=
                 `Concluído: ${x.total} vídeos.`;
 
-              generationInProgress =
+              generationInProgress=
                 false;
 
               updateGenerateButtonState();
 
               return;
+
             }
 
-            if(
-              x.status ===
-              "error"
-            ){
+
+            if(x.status==="error"){
 
               throw new Error(
                 x.error ||
                 "Processamento falhou."
               );
+
             }
 
             setTimeout(
@@ -2424,23 +2283,26 @@ $("go").onclick =
               error
             );
 
-            $("status")
-              .textContent =
-              "Erro: " +
+            $("status").textContent=
+              "Erro: "+
               error.message;
 
             alert(
               error.message
             );
 
-            generationInProgress =
+            generationInProgress=
               false;
 
             updateGenerateButtonState();
+
           }
+
         };
 
+
       poll();
+
 
     }catch(error){
 
@@ -2449,48 +2311,36 @@ $("go").onclick =
         error
       );
 
-      /*
-        Se algum upload já aconteceu e a criação do job
-        falhar, apaga os arquivos temporários.
-      */
-
       await deleteUploadedInputs(
         uploadedPaths
       );
 
-      $("status")
-        .textContent =
-        "Erro: " +
+      $("status").textContent=
+        "Erro: "+
         error.message;
 
       alert(
         error.message
       );
 
-      generationInProgress =
+      generationInProgress=
         false;
 
       updateGenerateButtonState();
+
     }
 
   };
 
 
-/* =========================================================
-   INICIA
-========================================================= */
-
 (async()=>{
 
-  const authenticated =
+  const authenticated=
     await initializeAuth();
 
-  if(
-    authenticated
-  ){
+  if(authenticated){
 
-    $("status")
-      .textContent =
+    $("status").textContent=
       "Pronto.";
 
     await loadMonthlyQuota();
