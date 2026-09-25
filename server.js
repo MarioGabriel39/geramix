@@ -37,6 +37,26 @@ const MAX_CTAS = 6;
 const MAX_FILE_SIZE =
   200 * 1024 * 1024;
 
+/*
+ * TEMPOS MÁXIMOS
+ *
+ * FFmpeg pode demorar bastante dependendo
+ * do tamanho dos vídeos.
+ *
+ * Upload também pode demorar bastante.
+ */
+const FFMPEG_TIMEOUT =
+  10 * 60 * 1000; // 10 minutos
+
+const STORAGE_UPLOAD_TIMEOUT =
+  15 * 60 * 1000; // 15 minutos
+
+const STORAGE_DOWNLOAD_TIMEOUT =
+  15 * 60 * 1000; // 15 minutos
+
+const DATABASE_TIMEOUT =
+  60 * 1000; // 1 minuto
+
 if (
   !SUPABASE_URL ||
   !SUPABASE_ANON_KEY
@@ -135,6 +155,63 @@ function encodedStoragePath(
 }
 
 /* =========================================================
+   FETCH COM TEMPO LIMITE
+========================================================= */
+
+async function fetchWithTimeout(
+  url,
+  options = {},
+  timeoutMs = 0
+) {
+  if (
+    !timeoutMs ||
+    timeoutMs <= 0
+  ) {
+    return fetch(
+      url,
+      options
+    );
+  }
+
+  const controller =
+    new AbortController();
+
+  const timer =
+    setTimeout(
+      () => {
+        controller.abort();
+      },
+      timeoutMs
+    );
+
+  try {
+    return await fetch(
+      url,
+      {
+        ...options,
+        signal:
+          controller.signal
+      }
+    );
+  } catch (error) {
+    if (
+      error?.name ===
+      "AbortError"
+    ) {
+      throw new Error(
+        `Tempo limite atingido após ${Math.round(
+          timeoutMs / 60000
+        )} minuto(s).`
+      );
+    }
+
+    throw error;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/* =========================================================
    AUTENTICAÇÃO
 ========================================================= */
 
@@ -177,7 +254,7 @@ async function requireAuth(
     }
 
     const response =
-      await fetch(
+      await fetchWithTimeout(
         `${SUPABASE_URL}/auth/v1/user`,
         {
           headers: {
@@ -187,7 +264,8 @@ async function requireAuth(
             apikey:
               SUPABASE_ANON_KEY
           }
-        }
+        },
+        DATABASE_TIMEOUT
       );
 
     if (!response.ok) {
@@ -231,7 +309,8 @@ async function requireAuth(
 async function supabaseRequest(
   url,
   options = {},
-  accessToken
+  accessToken,
+  timeoutMs = 0
 ) {
   const headers = {
     ...(options.headers || {}),
@@ -243,10 +322,14 @@ async function supabaseRequest(
       SUPABASE_ANON_KEY
   };
 
-  return fetch(url, {
-    ...options,
-    headers
-  });
+  return fetchWithTimeout(
+    url,
+    {
+      ...options,
+      headers
+    },
+    timeoutMs
+  );
 }
 
 /* =========================================================
@@ -272,7 +355,8 @@ async function rpc(
         body:
           JSON.stringify(body)
       },
-      accessToken
+      accessToken,
+      DATABASE_TIMEOUT
     );
 
   let data = null;
@@ -428,7 +512,8 @@ async function createPersistentJob(
               job.monthlyLimit
           })
       },
-      accessToken
+      accessToken,
+      DATABASE_TIMEOUT
     );
 
   if (!response.ok) {
@@ -505,7 +590,8 @@ async function updatePersistentJob(
         body:
           JSON.stringify(body)
       },
-      accessToken
+      accessToken,
+      DATABASE_TIMEOUT
     );
 
   if (!response.ok) {
@@ -541,7 +627,8 @@ async function getPersistentJobRow(
         userId
       )}&limit=1`,
       {},
-      accessToken
+      accessToken,
+      DATABASE_TIMEOUT
     );
 
   if (!response.ok) {
@@ -562,7 +649,8 @@ async function getPersistentJobRow(
 
 function runFFmpeg(
   args,
-  cwd
+  cwd,
+  timeoutMs = FFMPEG_TIMEOUT
 ) {
   return new Promise(
     (resolve, reject) => {
@@ -583,6 +671,37 @@ function runFFmpeg(
         );
 
       let stderr = "";
+      let finished = false;
+
+      const finishError =
+        error => {
+          if (finished) {
+            return;
+          }
+
+          finished = true;
+
+          clearTimeout(
+            timer
+          );
+
+          reject(error);
+        };
+
+      const finishSuccess =
+        () => {
+          if (finished) {
+            return;
+          }
+
+          finished = true;
+
+          clearTimeout(
+            timer
+          );
+
+          resolve();
+        };
 
       child.stderr.on(
         "data",
@@ -602,16 +721,16 @@ function runFFmpeg(
 
       child.on(
         "error",
-        reject
+        finishError
       );
 
       child.on(
         "close",
         code => {
           if (code === 0) {
-            resolve();
+            finishSuccess();
           } else {
-            reject(
+            finishError(
               new Error(
                 stderr.trim() ||
                   `FFmpeg saiu com código ${code}.`
@@ -620,6 +739,26 @@ function runFFmpeg(
           }
         }
       );
+
+      const timer =
+        setTimeout(
+          () => {
+            try {
+              child.kill(
+                "SIGKILL"
+              );
+            } catch {}
+
+            finishError(
+              new Error(
+                `FFmpeg ultrapassou o tempo limite de ${Math.round(
+                  timeoutMs / 60000
+                )} minutos.`
+              )
+            );
+          },
+          timeoutMs
+        );
     }
   );
 }
@@ -867,7 +1006,8 @@ async function downloadStorageObject(
         storagePath
       )}`,
       {},
-      accessToken
+      accessToken,
+      STORAGE_DOWNLOAD_TIMEOUT
     );
 
   if (
@@ -939,7 +1079,8 @@ async function deleteStorageObject(
         method:
           "DELETE"
       },
-      accessToken
+      accessToken,
+      DATABASE_TIMEOUT
     );
 
   if (
@@ -1089,7 +1230,8 @@ async function registerDownload({
               originalityScore
           })
       },
-      accessToken
+      accessToken,
+      DATABASE_TIMEOUT
     );
 
   if (!response.ok) {
@@ -1153,7 +1295,8 @@ async function uploadVideoToStorage(
           duplex:
             "half"
         },
-        accessToken
+        accessToken,
+        STORAGE_UPLOAD_TIMEOUT
       );
 
     if (!response.ok) {
@@ -1198,7 +1341,8 @@ function storagePathForDownload(
 async function createAndStoreDownload(
   job,
   file,
-  accessToken
+  accessToken,
+  onStage
 ) {
   const dir =
     path.join(
@@ -1250,10 +1394,26 @@ async function createAndStoreDownload(
   ];
 
   try {
+    /*
+     * ETAPA 1
+     */
+
+    await onStage?.(
+      `Montando vídeo ${file.index}/${job.total}…`
+    );
+
     await concatNormalized(
       sources,
       output,
       dir
+    );
+
+    /*
+     * ETAPA 2
+     */
+
+    await onStage?.(
+      `Enviando vídeo ${file.index}/${job.total}…`
     );
 
     const storagePath =
@@ -1267,6 +1427,14 @@ async function createAndStoreDownload(
       output,
       storagePath,
       accessToken
+    );
+
+    /*
+     * ETAPA 3
+     */
+
+    await onStage?.(
+      `Registrando vídeo ${file.index}/${job.total}…`
     );
 
     try {
@@ -1297,6 +1465,10 @@ async function createAndStoreDownload(
 
       throw error;
     }
+
+    await onStage?.(
+      `Vídeo ${file.index}/${job.total} salvo.`
+    );
 
     return storagePath;
   } finally {
@@ -1406,7 +1578,8 @@ async function getJobForUser(
         userId
       )}&order=file_name.asc`,
       {},
-      accessToken
+      accessToken,
+      DATABASE_TIMEOUT
     );
 
   let rows = [];
@@ -1778,10 +1951,10 @@ app.post(
     };
 
     /*
-     * IMPORTANTE:
      * Primeiro grava o job no Supabase.
      * Só depois responde ao navegador.
      */
+
     try {
       await createPersistentJob(
         job,
@@ -1850,10 +2023,6 @@ app.post(
         quota.monthlyLimit
     });
 
-    /*
-     * O processamento continua usando o mesmo job,
-     * mas o estado também é salvo no Supabase.
-     */
     void processJob({
       job,
 
@@ -1914,16 +2083,24 @@ async function processJob({
     }
   }
 
+  async function setCurrent(
+    message
+  ) {
+    job.current =
+      message;
+
+    await saveProgress();
+  }
+
   try {
     /* -----------------------------------------------------
        INPUTS
     ----------------------------------------------------- */
 
     if (storageMode) {
-      job.current =
-        "Baixando ganchos…";
-
-      await saveProgress();
+      await setCurrent(
+        "Baixando ganchos…"
+      );
 
       for (
         let i = 0;
@@ -1948,10 +2125,9 @@ async function processJob({
         );
       }
 
-      job.current =
-        "Baixando corpos…";
-
-      await saveProgress();
+      await setCurrent(
+        "Baixando corpos…"
+      );
 
       for (
         let i = 0;
@@ -1976,10 +2152,9 @@ async function processJob({
         );
       }
 
-      job.current =
-        "Baixando CTAs…";
-
-      await saveProgress();
+      await setCurrent(
+        "Baixando CTAs…"
+      );
 
       for (
         let i = 0;
@@ -2009,10 +2184,9 @@ async function processJob({
        GANCHOS
     ----------------------------------------------------- */
 
-    job.current =
-      "Preparando ganchos…";
-
-    await saveProgress();
+    await setCurrent(
+      "Preparando ganchos…"
+    );
 
     for (
       let i = 0;
@@ -2057,10 +2231,9 @@ async function processJob({
        CORPOS
     ----------------------------------------------------- */
 
-    job.current =
-      "Preparando corpos…";
-
-    await saveProgress();
+    await setCurrent(
+      "Preparando corpos…"
+    );
 
     for (
       let i = 0;
@@ -2105,10 +2278,9 @@ async function processJob({
        CTAs
     ----------------------------------------------------- */
 
-    job.current =
-      "Preparando CTAs…";
-
-    await saveProgress();
+    await setCurrent(
+      "Preparando CTAs…"
+    );
 
     for (
       let i = 0;
@@ -2296,21 +2468,33 @@ async function processJob({
       i < job.files.length;
       i++
     ) {
-      job.current =
-        `Gerando vídeos: ${
-          i + 1
-        }/${job.files.length}`;
-
-      await saveProgress();
-
       const file =
         job.files[i];
+
+      /*
+       * IMPORTANTE:
+       * Agora a tela recebe exatamente
+       * em qual etapa o vídeo está.
+       */
+
+      job.current =
+        `Preparando vídeo ${
+          i + 1
+        }/${job.files.length}…`;
+
+      await saveProgress();
 
       file.storagePath =
         await createAndStoreDownload(
           job,
           file,
-          accessToken
+          accessToken,
+          async stage => {
+            job.current =
+              stage;
+
+            await saveProgress();
+          }
         );
 
       file.stored =
@@ -2318,6 +2502,11 @@ async function processJob({
 
       job.done =
         i + 1;
+
+      job.current =
+        `Vídeo ${
+          i + 1
+        }/${job.files.length} concluído.`;
 
       await saveProgress();
     }
@@ -2327,10 +2516,9 @@ async function processJob({
     ----------------------------------------------------- */
 
     if (storageMode) {
-      job.current =
-        "Limpando vídeos de origem…";
-
-      await saveProgress();
+      await setCurrent(
+        "Limpando vídeos de origem…"
+      );
 
       for (
         const file of [
@@ -2418,7 +2606,8 @@ async function processJob({
         method:
           "DELETE"
       },
-      accessToken
+      accessToken,
+      DATABASE_TIMEOUT
     ).catch(
       () => {}
     );
@@ -2548,7 +2737,8 @@ async function findDownload(
         userId
       )}&limit=1`,
       {},
-      accessToken
+      accessToken,
+      DATABASE_TIMEOUT
     );
 
   if (!response.ok) {
@@ -2902,7 +3092,8 @@ async function cleanupExpiredDownloads(
         new Date().toISOString()
       )}`,
       {},
-      accessToken
+      accessToken,
+      DATABASE_TIMEOUT
     );
 
   if (!response.ok) {
@@ -2942,7 +3133,8 @@ async function cleanupExpiredDownloads(
         method:
           "DELETE"
       },
-      accessToken
+      accessToken,
+      DATABASE_TIMEOUT
     ).catch(
       () => {}
     );
@@ -2974,7 +3166,8 @@ app.get(
             req.user.id
           )}&order=created_at.desc`,
           {},
-          req.accessToken
+          req.accessToken,
+          DATABASE_TIMEOUT
         );
 
       if (!response.ok) {
@@ -3155,7 +3348,8 @@ app.delete(
             method:
               "DELETE"
           },
-          req.accessToken
+          req.accessToken,
+          DATABASE_TIMEOUT
         );
 
       if (!response.ok) {
@@ -3234,17 +3428,37 @@ app.use(
    SERVIDOR
 ========================================================= */
 
-app.listen(
-  PORT,
-  () => {
-    console.log(
-      `GeraMix rodando na porta ${PORT}`
-    );
+const server =
+  app.listen(
+    PORT,
+    () => {
+      console.log(
+        `GeraMix rodando na porta ${PORT}`
+      );
 
-    console.log(
-      `FFmpeg disponível: ${Boolean(
-        ffmpegPath
-      )}`
-    );
-  }
-);
+      console.log(
+        `FFmpeg disponível: ${Boolean(
+          ffmpegPath
+        )}`
+      );
+
+      console.log(
+        `Timeout FFmpeg: ${Math.round(
+          FFMPEG_TIMEOUT / 60000
+        )} minutos`
+      );
+
+      console.log(
+        `Timeout Storage upload: ${Math.round(
+          STORAGE_UPLOAD_TIMEOUT / 60000
+        )} minutos`
+      );
+    }
+  );
+
+/*
+ * Não deixamos o servidor HTTP
+ * encerrar conexões por inatividade
+ * durante operações longas.
+ */
+server.timeout = 0;
