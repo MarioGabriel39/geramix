@@ -39,23 +39,19 @@ const MAX_FILE_SIZE =
 
 /*
  * TEMPOS MÁXIMOS
- *
- * FFmpeg pode demorar bastante dependendo
- * do tamanho dos vídeos.
- *
- * Upload também pode demorar bastante.
  */
+
 const FFMPEG_TIMEOUT =
-  10 * 60 * 1000; // 10 minutos
+  10 * 60 * 1000;
 
 const STORAGE_UPLOAD_TIMEOUT =
-  15 * 60 * 1000; // 15 minutos
+  15 * 60 * 1000;
 
 const STORAGE_DOWNLOAD_TIMEOUT =
-  15 * 60 * 1000; // 15 minutos
+  15 * 60 * 1000;
 
 const DATABASE_TIMEOUT =
-  60 * 1000; // 1 minuto
+  60 * 1000;
 
 if (
   !SUPABASE_URL ||
@@ -333,6 +329,44 @@ async function supabaseRequest(
 }
 
 /* =========================================================
+   LÊ ERRO DO SUPABASE
+========================================================= */
+
+async function getResponseError(
+  response
+) {
+  let text = "";
+
+  try {
+    text =
+      await response.text();
+  } catch {
+    return "";
+  }
+
+  if (!text) {
+    return "";
+  }
+
+  try {
+    const data =
+      JSON.parse(text);
+
+    return (
+      data?.message ||
+      data?.msg ||
+      data?.error_description ||
+      data?.error ||
+      data?.details ||
+      data?.hint ||
+      text
+    );
+  } catch {
+    return text;
+  }
+}
+
+/* =========================================================
    RPC
 ========================================================= */
 
@@ -359,12 +393,19 @@ async function rpc(
       DATABASE_TIMEOUT
     );
 
+  const text =
+    await response.text();
+
   let data = null;
 
-  try {
-    data =
-      await response.json();
-  } catch {}
+  if (text) {
+    try {
+      data =
+        JSON.parse(text);
+    } catch {
+      data = text;
+    }
+  }
 
   if (!response.ok) {
     throw new Error(
@@ -372,7 +413,11 @@ async function rpc(
         data?.msg ||
         data?.error_description ||
         data?.error ||
-        `RPC ${name} falhou.`
+        (
+          typeof data === "string"
+            ? data
+            : `RPC ${name} falhou com HTTP ${response.status}.`
+        )
     );
   }
 
@@ -476,7 +521,7 @@ async function createPersistentJob(
             "application/json",
 
           Prefer:
-            "return=minimal"
+            "return=representation"
         },
 
         body:
@@ -517,23 +562,39 @@ async function createPersistentJob(
     );
 
   if (!response.ok) {
-    let detail = "";
-
-    try {
-      const data =
-        await response.json();
-
-      detail =
-        data?.message ||
-        data?.error ||
-        "";
-    } catch {}
+    const detail =
+      await getResponseError(
+        response
+      );
 
     throw new Error(
       detail ||
-        "Não foi possível salvar o processamento."
+        `Não foi possível salvar o processamento (HTTP ${response.status}).`
     );
   }
+
+  const text =
+    await response.text();
+
+  let rows = [];
+
+  if (text) {
+    try {
+      rows =
+        JSON.parse(text);
+    } catch {}
+  }
+
+  if (
+    !Array.isArray(rows) ||
+    !rows.length
+  ) {
+    throw new Error(
+      "O processamento foi enviado, mas o Supabase não confirmou a criação do job."
+    );
+  }
+
+  return rows[0];
 }
 
 async function updatePersistentJob(
@@ -584,7 +645,7 @@ async function updatePersistentJob(
             "application/json",
 
           Prefer:
-            "return=minimal"
+            "return=representation"
         },
 
         body:
@@ -595,23 +656,39 @@ async function updatePersistentJob(
     );
 
   if (!response.ok) {
-    let detail = "";
-
-    try {
-      const data =
-        await response.json();
-
-      detail =
-        data?.message ||
-        data?.error ||
-        "";
-    } catch {}
+    const detail =
+      await getResponseError(
+        response
+      );
 
     throw new Error(
       detail ||
-        "Não foi possível atualizar o processamento."
+        `Não foi possível atualizar o processamento (HTTP ${response.status}).`
     );
   }
+
+  const text =
+    await response.text();
+
+  let rows = [];
+
+  if (text) {
+    try {
+      rows =
+        JSON.parse(text);
+    } catch {}
+  }
+
+  if (
+    !Array.isArray(rows) ||
+    !rows.length
+  ) {
+    throw new Error(
+      "O Supabase não confirmou a atualização do job."
+    );
+  }
+
+  return rows[0];
 }
 
 async function getPersistentJobRow(
@@ -631,12 +708,41 @@ async function getPersistentJobRow(
       DATABASE_TIMEOUT
     );
 
+  /*
+   * IMPORTANTE:
+   * HTTP diferente de 2xx agora NÃO é tratado
+   * como se o job simplesmente não existisse.
+   */
+
   if (!response.ok) {
+    const detail =
+      await getResponseError(
+        response
+      );
+
+    throw new Error(
+      detail ||
+        `Não foi possível consultar o job (HTTP ${response.status}).`
+    );
+  }
+
+  const text =
+    await response.text();
+
+  if (!text) {
     return null;
   }
 
-  const rows =
-    await response.json();
+  let rows;
+
+  try {
+    rows =
+      JSON.parse(text);
+  } catch {
+    throw new Error(
+      "O Supabase retornou uma resposta inválida ao consultar o job."
+    );
+  }
 
   return Array.isArray(rows)
     ? rows[0] || null
@@ -672,6 +778,8 @@ function runFFmpeg(
 
       let stderr = "";
       let finished = false;
+
+      let timer;
 
       const finishError =
         error => {
@@ -740,7 +848,7 @@ function runFFmpeg(
         }
       );
 
-      const timer =
+      timer =
         setTimeout(
           () => {
             try {
@@ -1014,17 +1122,10 @@ async function downloadStorageObject(
     !response.ok ||
     !response.body
   ) {
-    let detail = "";
-
-    try {
-      const data =
-        await response.json();
-
-      detail =
-        data?.message ||
-        data?.error ||
-        "";
-    } catch {}
+    const detail =
+      await getResponseError(
+        response
+      );
 
     throw new Error(
       detail ||
@@ -1087,8 +1188,14 @@ async function deleteStorageObject(
     !response.ok &&
     response.status !== 404
   ) {
+    const detail =
+      await getResponseError(
+        response
+      );
+
     throw new Error(
-      `Supabase não conseguiu excluir o arquivo (${response.status}).`
+      detail ||
+        `Supabase não conseguiu excluir o arquivo (${response.status}).`
     );
   }
 }
@@ -1198,6 +1305,10 @@ async function registerDownload({
   originalityScore,
   accessToken
 }) {
+  console.log(
+    `[GeraMix] Registrando download: job=${jobId}, arquivo=${fileName}`
+  );
+
   const response =
     await supabaseRequest(
       `${SUPABASE_URL}/rest/v1/downloads`,
@@ -1208,8 +1319,13 @@ async function registerDownload({
           "Content-Type":
             "application/json",
 
+          /*
+           * return=representation é importante:
+           * agora o Supabase precisa confirmar
+           * que a linha realmente foi criada.
+           */
           Prefer:
-            "return=minimal"
+            "return=representation"
         },
 
         body:
@@ -1235,23 +1351,48 @@ async function registerDownload({
     );
 
   if (!response.ok) {
-    let detail = "";
-
-    try {
-      const data =
-        await response.json();
-
-      detail =
-        data?.message ||
-        data?.error ||
-        "";
-    } catch {}
+    const detail =
+      await getResponseError(
+        response
+      );
 
     throw new Error(
       detail ||
         `Não foi possível registrar o vídeo (${response.status}).`
     );
   }
+
+  const text =
+    await response.text();
+
+  let rows = [];
+
+  if (text) {
+    try {
+      rows =
+        JSON.parse(text);
+    } catch {
+      throw new Error(
+        "O Supabase respondeu ao registro do vídeo com um formato inválido."
+      );
+    }
+  }
+
+  if (
+    !Array.isArray(rows) ||
+    !rows.length ||
+    !rows[0]?.id
+  ) {
+    throw new Error(
+      "O vídeo foi enviado ao Storage, mas o Supabase não confirmou o registro na tabela downloads."
+    );
+  }
+
+  console.log(
+    `[GeraMix] Download registrado: id=${rows[0].id}, arquivo=${fileName}`
+  );
+
+  return rows[0];
 }
 
 async function uploadVideoToStorage(
@@ -1263,6 +1404,10 @@ async function uploadVideoToStorage(
     await fsp.stat(
       localPath
     );
+
+  console.log(
+    `[GeraMix] Enviando Storage: ${storagePath} (${stat.size} bytes)`
+  );
 
   const stream =
     fs.createReadStream(
@@ -1300,23 +1445,20 @@ async function uploadVideoToStorage(
       );
 
     if (!response.ok) {
-      let detail = "";
-
-      try {
-        const data =
-          await response.json();
-
-        detail =
-          data?.message ||
-          data?.error ||
-          "";
-      } catch {}
+      const detail =
+        await getResponseError(
+          response
+        );
 
       throw new Error(
         detail ||
           `Supabase Storage recusou o vídeo (${response.status}).`
       );
     }
+
+    console.log(
+      `[GeraMix] Upload concluído: ${storagePath}`
+    );
   } finally {
     stream.destroy();
   }
@@ -1393,10 +1535,13 @@ async function createAndStoreDownload(
     )
   ];
 
+  let uploadedStoragePath =
+    null;
+
   try {
-    /*
-     * ETAPA 1
-     */
+    /* -----------------------------------------------------
+       ETAPA 1
+    ----------------------------------------------------- */
 
     await onStage?.(
       `Montando vídeo ${file.index}/${job.total}…`
@@ -1408,9 +1553,9 @@ async function createAndStoreDownload(
       dir
     );
 
-    /*
-     * ETAPA 2
-     */
+    /* -----------------------------------------------------
+       ETAPA 2
+    ----------------------------------------------------- */
 
     await onStage?.(
       `Enviando vídeo ${file.index}/${job.total}…`
@@ -1429,12 +1574,19 @@ async function createAndStoreDownload(
       accessToken
     );
 
-    /*
-     * ETAPA 3
-     */
+    uploadedStoragePath =
+      storagePath;
+
+    /* -----------------------------------------------------
+       ETAPA 3
+    ----------------------------------------------------- */
 
     await onStage?.(
       `Registrando vídeo ${file.index}/${job.total}…`
+    );
+
+    console.log(
+      `[GeraMix] Iniciando registro: job=${job.id}, arquivo=${file.name}`
     );
 
     try {
@@ -1456,12 +1608,30 @@ async function createAndStoreDownload(
         accessToken
       });
     } catch (error) {
+      console.error(
+        `[GeraMix] Falha ao registrar ${file.name}:`,
+        error
+      );
+
+      /*
+       * Se o Storage já recebeu o vídeo,
+       * remove o arquivo para não deixar
+       * lixo no bucket.
+       */
       await deleteStorageObject(
         storagePath,
         accessToken
       ).catch(
-        () => {}
+        cleanupError => {
+          console.error(
+            `[GeraMix] Falha ao remover Storage após erro de registro:`,
+            cleanupError
+          );
+        }
       );
+
+      uploadedStoragePath =
+        null;
 
       throw error;
     }
@@ -1470,7 +1640,34 @@ async function createAndStoreDownload(
       `Vídeo ${file.index}/${job.total} salvo.`
     );
 
+    console.log(
+      `[GeraMix] Vídeo ${file.index}/${job.total} finalizado com sucesso.`
+    );
+
     return storagePath;
+  } catch (error) {
+    /*
+     * Segurança adicional:
+     * se o upload ocorreu mas alguma etapa
+     * posterior falhou, tenta remover o arquivo.
+     */
+    if (
+      uploadedStoragePath
+    ) {
+      await deleteStorageObject(
+        uploadedStoragePath,
+        accessToken
+      ).catch(
+        cleanupError => {
+          console.error(
+            `[GeraMix] Não foi possível limpar arquivo órfão:`,
+            cleanupError
+          );
+        }
+      );
+    }
+
+    throw error;
   } finally {
     await fsp.rm(
       output,
@@ -1582,18 +1779,40 @@ async function getJobForUser(
       DATABASE_TIMEOUT
     );
 
+  if (
+    !downloadsResponse.ok
+  ) {
+    const detail =
+      await getResponseError(
+        downloadsResponse
+      );
+
+    throw new Error(
+      detail ||
+        `Não foi possível consultar os vídeos do job (HTTP ${downloadsResponse.status}).`
+    );
+  }
+
+  const text =
+    await downloadsResponse.text();
+
   let rows = [];
 
-  if (
-    downloadsResponse.ok
-  ) {
-    const data =
-      await downloadsResponse.json();
+  if (text) {
+    try {
+      const data =
+        JSON.parse(text);
 
-    if (
-      Array.isArray(data)
-    ) {
-      rows = data;
+      if (
+        Array.isArray(data)
+      ) {
+        rows =
+          data;
+      }
+    } catch {
+      throw new Error(
+        "O Supabase retornou uma resposta inválida ao consultar downloads."
+      );
     }
   }
 
@@ -2023,6 +2242,10 @@ app.post(
         quota.monthlyLimit
     });
 
+    /*
+     * O processamento continua usando
+     * o mesmo job persistente.
+     */
     void processJob({
       job,
 
@@ -2471,12 +2694,6 @@ async function processJob({
       const file =
         job.files[i];
 
-      /*
-       * IMPORTANTE:
-       * Agora a tela recebe exatamente
-       * em qual etapa o vídeo está.
-       */
-
       job.current =
         `Preparando vídeo ${
           i + 1
@@ -2566,6 +2783,10 @@ async function processJob({
       }
     );
 
+    console.log(
+      `[GeraMix] JOB CONCLUÍDO: ${job.id}`
+    );
+
   } catch (error) {
     console.error(
       "GeraMix processamento:",
@@ -2588,7 +2809,12 @@ async function processJob({
         file.storagePath,
         accessToken
       ).catch(
-        () => {}
+        cleanupError => {
+          console.error(
+            "GeraMix output cleanup:",
+            cleanupError
+          );
+        }
       );
     }
 
@@ -2609,7 +2835,12 @@ async function processJob({
       accessToken,
       DATABASE_TIMEOUT
     ).catch(
-      () => {}
+      cleanupError => {
+        console.error(
+          "GeraMix downloads cleanup:",
+          cleanupError
+        );
+      }
     );
 
     /* -----------------------------------------------------
@@ -2714,6 +2945,7 @@ app.get(
         .status(500)
         .json({
           error:
+            error?.message ||
             "Não foi possível consultar o processamento."
         });
     }
@@ -2742,14 +2974,37 @@ async function findDownload(
     );
 
   if (!response.ok) {
+    const detail =
+      await getResponseError(
+        response
+      );
+
+    throw new Error(
+      detail ||
+        `Não foi possível consultar o download (HTTP ${response.status}).`
+    );
+  }
+
+  const text =
+    await response.text();
+
+  if (!text) {
     return null;
   }
 
-  const rows =
-    await response.json();
+  let rows;
+
+  try {
+    rows =
+      JSON.parse(text);
+  } catch {
+    throw new Error(
+      "O Supabase retornou uma resposta inválida ao consultar o download."
+    );
+  }
 
   return Array.isArray(rows)
-    ? rows[0]
+    ? rows[0] || null
     : null;
 }
 
@@ -2780,7 +3035,8 @@ async function streamStoredVideo(
       {
         headers
       },
-      req.accessToken
+      req.accessToken,
+      STORAGE_DOWNLOAD_TIMEOUT
     );
 
   if (!response.ok) {
@@ -2949,65 +3205,65 @@ app.get(
     req,
     res
   ) => {
-    const job =
-      await getJobForUser(
-        req.params.id,
-        req.user.id,
-        req.accessToken
-      );
-
-    if (!job) {
-      return res
-        .status(404)
-        .send(
-          "Processamento não encontrado."
-        );
-    }
-
-    if (
-      job.status !==
-      "done"
-    ) {
-      return res
-        .status(400)
-        .send(
-          "O processamento ainda não terminou."
-        );
-    }
-
-    res.setHeader(
-      "Content-Type",
-      "application/zip"
-    );
-
-    res.setHeader(
-      "Content-Disposition",
-      'attachment; filename="geramix-videos.zip"'
-    );
-
-    const archive =
-      archiver(
-        "zip",
-        {
-          zlib: {
-            level: 0
-          }
-        }
-      );
-
-    archive.on(
-      "error",
-      error =>
-        res.destroy(
-          error
-        )
-    );
-
-    archive.pipe(
-      res
-    );
-
     try {
+      const job =
+        await getJobForUser(
+          req.params.id,
+          req.user.id,
+          req.accessToken
+        );
+
+      if (!job) {
+        return res
+          .status(404)
+          .send(
+            "Processamento não encontrado."
+          );
+      }
+
+      if (
+        job.status !==
+        "done"
+      ) {
+        return res
+          .status(400)
+          .send(
+            "O processamento ainda não terminou."
+          );
+      }
+
+      res.setHeader(
+        "Content-Type",
+        "application/zip"
+      );
+
+      res.setHeader(
+        "Content-Disposition",
+        'attachment; filename="geramix-videos.zip"'
+      );
+
+      const archive =
+        archiver(
+          "zip",
+          {
+            zlib: {
+              level: 0
+            }
+          }
+        );
+
+      archive.on(
+        "error",
+        error =>
+          res.destroy(
+            error
+          )
+      );
+
+      archive.pipe(
+        res
+      );
+
       for (
         const file of
           job.files
@@ -3026,15 +3282,22 @@ app.get(
               file.storagePath
             )}`,
             {},
-            req.accessToken
+            req.accessToken,
+            STORAGE_DOWNLOAD_TIMEOUT
           );
 
         if (
           !response.ok ||
           !response.body
         ) {
+          const detail =
+            await getResponseError(
+              response
+            );
+
           throw new Error(
-            `Não foi possível ler ${file.name} do Storage.`
+            detail ||
+              `Não foi possível ler ${file.name} do Storage.`
           );
         }
 
@@ -3056,8 +3319,6 @@ app.get(
         "GeraMix ZIP:",
         error
       );
-
-      archive.abort();
 
       if (
         !res.headersSent
@@ -3097,11 +3358,35 @@ async function cleanupExpiredDownloads(
     );
 
   if (!response.ok) {
+    const detail =
+      await getResponseError(
+        response
+      );
+
+    console.error(
+      "GeraMix cleanup expired:",
+      detail ||
+        response.status
+    );
+
     return;
   }
 
-  const rows =
-    await response.json();
+  const text =
+    await response.text();
+
+  if (!text) {
+    return;
+  }
+
+  let rows;
+
+  try {
+    rows =
+      JSON.parse(text);
+  } catch {
+    return;
+  }
 
   if (
     !Array.isArray(rows)
@@ -3119,7 +3404,12 @@ async function cleanupExpiredDownloads(
         row.storage_path,
         accessToken
       ).catch(
-        () => {}
+        error => {
+          console.error(
+            "GeraMix expired storage cleanup:",
+            error
+          );
+        }
       );
     }
 
@@ -3136,7 +3426,12 @@ async function cleanupExpiredDownloads(
       accessToken,
       DATABASE_TIMEOUT
     ).catch(
-      () => {}
+      error => {
+        console.error(
+          "GeraMix expired row cleanup:",
+          error
+        );
+      }
     );
   }
 }
@@ -3171,60 +3466,87 @@ app.get(
         );
 
       if (!response.ok) {
+        const detail =
+          await getResponseError(
+            response
+          );
+
         return res
           .status(500)
           .json({
             error:
+              detail ||
               "Não foi possível carregar seus downloads."
           });
       }
 
-      const rows =
-        await response.json();
+      const text =
+        await response.text();
+
+      let rows = [];
+
+      if (text) {
+        try {
+          const data =
+            JSON.parse(text);
+
+          if (
+            Array.isArray(data)
+          ) {
+            rows =
+              data;
+          }
+        } catch {
+          return res
+            .status(500)
+            .json({
+              error:
+                "Resposta inválida ao carregar seus downloads."
+            });
+        }
+      }
 
       res.json({
         downloads:
-          Array.isArray(rows)
-            ? rows.map(
-                row => ({
-                  id:
-                    row.id,
+          rows.map(
+            row => ({
+              id:
+                row.id,
 
-                  jobId:
-                    row.job_id,
+              jobId:
+                row.job_id,
 
-                  fileName:
-                    row.file_name,
+              fileName:
+                row.file_name,
 
-                  originality:
-                    Number.isFinite(
-                      Number(
-                        row.originality
-                      )
+              originality:
+                Number.isFinite(
+                  Number(
+                    row.originality
+                  )
+                )
+                  ? Number(
+                      row.originality
                     )
-                      ? Number(
-                          row.originality
-                        )
-                      : null,
+                  : null,
 
-                  createdAt:
-                    row.created_at,
+              createdAt:
+                row.created_at,
 
-                  expiresAt:
-                    row.expires_at,
+              expiresAt:
+                row.expires_at,
 
-                  videoUrl:
-                    `/api/downloads/${encodeURIComponent(
-                      row.id
-                    )}/video`,
+              videoUrl:
+                `/api/downloads/${encodeURIComponent(
+                  row.id
+                )}/video`,
 
-                  downloadUrl:
-                    `/api/downloads/${encodeURIComponent(
-                      row.id
-                    )}/video?download=1`
-                })
-              )
-            : []
+              downloadUrl:
+                `/api/downloads/${encodeURIComponent(
+                  row.id
+                )}/video?download=1`
+            })
+          )
       });
     } catch (error) {
       console.error(
@@ -3236,6 +3558,7 @@ app.get(
         .status(500)
         .json({
           error:
+            error?.message ||
             "Não foi possível carregar seus downloads."
         });
     }
@@ -3353,10 +3676,16 @@ app.delete(
         );
 
       if (!response.ok) {
+        const detail =
+          await getResponseError(
+            response
+          );
+
         return res
           .status(500)
           .json({
             error:
+              detail ||
               "Não foi possível excluir o vídeo."
           });
       }
@@ -3376,6 +3705,7 @@ app.delete(
         .status(500)
         .json({
           error:
+            error?.message ||
             "Não foi possível excluir o vídeo."
         });
     }
@@ -3456,9 +3786,4 @@ const server =
     }
   );
 
-/*
- * Não deixamos o servidor HTTP
- * encerrar conexões por inatividade
- * durante operações longas.
- */
 server.timeout = 0;
