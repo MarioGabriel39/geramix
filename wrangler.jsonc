@@ -1,11 +1,11 @@
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
+
   "name": "geramix",
+
   "main": "src/index.js",
-  "compatibility_date": "2026-09-25",
-  "compatibility_flags": [
-    "nodejs_compat"
-  ],
+
+  "compatibility_date": "2026-09-26",
 
   "containers": [
     {
@@ -23,7 +23,7 @@
         "class_name": "GeraMixContainer"
       }
     ]
-  },
+  ],
 
   "migrations": [
     {
