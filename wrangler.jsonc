@@ -3,9 +3,13 @@
 
   "name": "geramix",
 
-  "main": "src/index.js",
+  "main": "worker.js",
 
   "compatibility_date": "2026-09-26",
+
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
 
   "containers": [
     {
