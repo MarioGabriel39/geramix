@@ -9,6 +9,7 @@
     "dev": "node --watch server.js"
   },
   "dependencies": {
+    "@cloudflare/containers": "^0.3.7",
     "@supabase/supabase-js": "^2.57.0",
     "@vercel/functions": "^3.0.0",
     "archiver": "^7.0.1",
