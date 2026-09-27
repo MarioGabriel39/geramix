@@ -1,4 +1,5 @@
 {
+  "$schema": "./node_modules/wrangler/config-schema.json",
   "name": "geramix",
   "main": "src/index.js",
   "compatibility_date": "2026-09-27",
@@ -8,7 +9,9 @@
   "containers": [
     {
       "class_name": "GeraMixContainer",
-      "image": "./Dockerfile"
+      "image": "./Dockerfile",
+      "instance_type": "basic",
+      "max_instances": 1
     }
   ],
   "durable_objects": {
