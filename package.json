@@ -11,7 +11,6 @@
   "dependencies": {
     "@cloudflare/containers": "^0.3.7",
     "@supabase/supabase-js": "^2.57.0",
-    "@vercel/functions": "^3.0.0",
     "archiver": "^7.0.1",
     "express": "^5.1.0",
     "ffmpeg-static": "^5.2.0",
