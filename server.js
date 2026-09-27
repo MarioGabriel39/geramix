@@ -9,7 +9,6 @@ import { spawn } from "child_process";
 import { Readable } from "stream";
 import archiver from "archiver";
 import ffmpegPath from "ffmpeg-static";
-import { waitUntil } from "@vercel/functions";
 
 const app = express();
 
@@ -2306,7 +2305,7 @@ async function processJobChunk({
 }
 
 /* =========================================================
-   INICIA PRÓXIMA ETAPA NA VERCEL
+   INICIA PRÓXIMA ETAPA
 ========================================================= */
 
 async function triggerNextChunk(
@@ -2443,8 +2442,6 @@ async function runJob(
      * IMPORTANTE:
      * Não fazemos recursão aqui.
      * Uma nova chamada HTTP é criada.
-     * Assim a próxima etapa ganha uma nova
-     * execução da Function.
      */
     await triggerNextChunk(
       job.id,
@@ -2487,9 +2484,6 @@ async function runJob(
     /*
      * Se ainda não havia vídeos concluídos,
      * devolve a cota.
-     *
-     * Se já havia vídeos registrados,
-     * não devolvemos tudo novamente.
      */
     if (
       Number(job.done || 0) === 0
@@ -2776,23 +2770,11 @@ app.post(
      * Os próximos blocos serão chamadas HTTP
      * independentes.
      */
-    if (
-      process.env.VERCEL
-    ) {
-      waitUntil(
-        runJob(
-          job,
-          req.accessToken,
-          origin
-        )
-      );
-    } else {
-      void runJob(
-        job,
-        req.accessToken,
-        origin
-      );
-    }
+    void runJob(
+      job,
+      req.accessToken,
+      origin
+    );
   }
 );
 
@@ -2922,23 +2904,11 @@ app.post(
           req
         );
 
-      if (
-        process.env.VERCEL
-      ) {
-        waitUntil(
-          runJob(
-            job,
-            req.accessToken,
-            origin
-          )
-        );
-      } else {
-        void runJob(
-          job,
-          req.accessToken,
-          origin
-        );
-      }
+      void runJob(
+        job,
+        req.accessToken,
+        origin
+      );
 
     } catch (error) {
       console.error(
