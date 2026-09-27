@@ -1,21 +1,16 @@
 {
-  "$schema": "./node_modules/wrangler/config-schema.json",
-
   "name": "geramix",
-
   "main": "src/index.js",
-
-  "compatibility_date": "2026-09-24",
-
+  "compatibility_date": "2026-09-27",
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
   "containers": [
     {
       "class_name": "GeraMixContainer",
-      "image": "./Dockerfile",
-      "instance_type": "standard-2",
-      "max_instances": 1
+      "image": "./Dockerfile"
     }
   ],
-
   "durable_objects": {
     "bindings": [
       {
@@ -24,7 +19,6 @@
       }
     ]
   },
-
   "migrations": [
     {
       "tag": "v1",
